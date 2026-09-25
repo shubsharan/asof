@@ -43,8 +43,7 @@ export async function startMonitor(db: Database, company: Company) {
 /** Records evidence from the monitor's change feed. Safe to repeat: known URLs are skipped. */
 export async function pullMonitor(db: Database, company: Company) {
   if (!company.monitorId) return [];
-  const ids = new Set(company.hypotheses.map((h) => h.id));
-  return (await monitorEvidence(company.monitorId))
-    .filter((c) => ids.has(c.hypothesisId))
-    .flatMap((c) => recordEvidence(db, c.hypothesisId, c.evidence, "monitor", c.at));
+  return (await monitorEvidence(company.monitorId)).flatMap((c) =>
+    recordEvidence(db, c.hypothesisId, c.evidence, "monitor", c.at),
+  );
 }

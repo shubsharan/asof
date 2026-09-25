@@ -33,7 +33,7 @@ export async function monitorEvidence(monitorId: string): Promise<{ hypothesisId
     at: c.createdAt,
     evidence: (c.content.citations ?? []).map((cite) => ({
       title: cite.title ?? cite.url,
-      claim: cite.note ?? String(c.content.value),
+      claim: cite.note || String(c.content.value),
       url: cite.url,
     })),
   }));
