@@ -14,6 +14,8 @@ export type Evidence = {
   discoveredAt: string;
   type: EvidenceType;
   source: "search" | "agent" | "monitor";
+  /** Why the source was judged credible, when the screening step recorded it. */
+  sourceReasoning?: string;
 };
 
 /**

@@ -10,8 +10,9 @@
 - [x] Scripts: `dev`, `seed`, `test`; tests pass
 
 ## 2. Exa Search
-- [ ] `bun add exa-js`, `EXA_API_KEY` in `.env`
-- [ ] `POST /api/research/search` → Exa results → Evidence → `recordEvidence`
+- [x] `bun add exa-js`, `EXA_API_KEY` in `.env`
+- [x] `POST /api/research/search` → Exa results → Evidence → `recordEvidence`
+- [x] Deep search (for + against queries) with `outputSchema` + `systemPrompt` source screening; `sourceReasoning` stored on Evidence
 - [ ] Optional: set Evidence `type` (supports / contradicts / neutral) with Jev `choice()` (see 4a)
 
 ## 3. Exa Agent
@@ -47,7 +48,7 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 - [ ] Portfolio → Target overview → Hypothesis detail → Rewind timeline
 
 ## Notes
-- All code lives under `src/` (tests in `tests/`, generated data in `data/`); nothing but config at the repo root.
+- All code and tests live under `src/` (tests in `src/tests/`, generated data in `data/`); nothing but config at the repo root.
 - Verify the current `exa-js` API before each Exa step.
 - Verify the current `@typesafe-ai/sdk` API before 4a (untested so far).
 - Present Jev as supporting infrastructure; the demo story stays the four Exa products.

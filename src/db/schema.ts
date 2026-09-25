@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS evidence (
   discovered_at TEXT NOT NULL,
   type          TEXT NOT NULL CHECK (type IN ('supports', 'contradicts', 'neutral')),
   source        TEXT NOT NULL CHECK (source IN ('search', 'agent', 'monitor')),
+  source_reasoning TEXT,
   UNIQUE (hypothesis_id, url)
 );
 `;

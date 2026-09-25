@@ -15,6 +15,7 @@ type EvidenceRow = {
   discovered_at: string;
   type: Evidence["type"];
   source: Evidence["source"];
+  source_reasoning: string | null;
 };
 
 type VersionRow = {
@@ -36,6 +37,7 @@ const toEvidence = (r: EvidenceRow): Evidence => ({
   discoveredAt: r.discovered_at,
   type: r.type,
   source: r.source,
+  sourceReasoning: r.source_reasoning ?? undefined,
 });
 
 const toVersion = (r: VersionRow): HypothesisVersion => ({
@@ -64,8 +66,8 @@ export function recordEvidence(
   now = new Date().toISOString(),
 ): Evidence[] {
   const insert = db.query<EvidenceRow, Record<string, string | null>>(
-    `INSERT INTO evidence (id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source)
-     VALUES ($id, $hypothesisId, $title, $claim, $url, $publishedAt, $now, $type, $source)
+    `INSERT INTO evidence (id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning)
+     VALUES ($id, $hypothesisId, $title, $claim, $url, $publishedAt, $now, $type, $source, $sourceReasoning)
      ON CONFLICT (hypothesis_id, url) DO NOTHING
      RETURNING *`,
   );
@@ -81,6 +83,7 @@ export function recordEvidence(
         now,
         type: item.type,
         source,
+        sourceReasoning: item.sourceReasoning ?? null,
       });
       return row ? [toEvidence(row)] : [];
     }),

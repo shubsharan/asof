@@ -1,13 +1,13 @@
 import { test, expect } from "bun:test";
-import { createDb } from "../src/db/schema";
+import { createDb } from "../db/schema";
 import {
-  assessHypothesis,
-  createHypothesis,
-  getCompany,
-  listPortfolio,
-  recordEvidence,
-  type NewEvidence,
-} from "../src/db/queries";
+    assessHypothesis,
+    createHypothesis,
+    getCompany,
+    listPortfolio,
+    recordEvidence,
+    type NewEvidence,
+} from "../db/queries";
 
 function setup() {
   const db = createDb(":memory:");

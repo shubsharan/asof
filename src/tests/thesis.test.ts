@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { compareThesis, thesisAsOf } from "../src/domain/thesis";
-import type { Company, Evidence } from "../src/domain/types";
+import { compareThesis, thesisAsOf } from "../domain/thesis";
+import type { Company, Evidence } from "../domain/types";
 
 const ev = (id: string, publishedAt: string | undefined, discoveredAt = "2026-09-20"): Evidence => ({
   id,
