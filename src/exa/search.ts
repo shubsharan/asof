@@ -51,8 +51,7 @@ export async function searchEvidence(company: Company, hypothesis: Hypothesis, a
   const responses = await Promise.all(
     queries.map((query) =>
       exa.search(query, {
-        // Deep runs several searches and reasons harder, which the source screening needs.
-        type: "deep",
+        type: "auto",
         systemPrompt: systemPrompt(subject, hypothesis.statement),
         outputSchema: OUTPUT_SCHEMA,
         contents: { highlights: true },

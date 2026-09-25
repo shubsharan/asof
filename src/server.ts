@@ -1,5 +1,6 @@
 import { createDb } from "./db/schema";
 import { getCompany, listPortfolio } from "./db/queries";
+import { pageThenAndNow } from "./exa/snapshot";
 import { loadHypothesis, pullMonitor, runAgent, runSearch, startMonitor } from "./research";
 
 const db = createDb();
@@ -34,6 +35,12 @@ const server = Bun.serve({
       POST: async (req) => {
         const t = await target(req);
         return t ? Response.json(await runAgent(db, t.company, t.hypothesis)) : notFound();
+      },
+    },
+    "/api/snapshot": {
+      POST: async (req) => {
+        const { url, asOf } = (await req.json()) as { url: string; asOf: string };
+        return Response.json(await pageThenAndNow(url, asOf));
       },
     },
     "/api/companies/:id/monitor": {

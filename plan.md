@@ -40,7 +40,7 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 - [ ] Fallback when no key: route everything to the monitor's own hypothesis, `type: "neutral"`
 
 ## 5. Exa Snapshot
-- [ ] `POST /api/snapshot` → search limited to what was available by a date
+- [x] `POST /api/snapshot {url, asOf}` → a page as it was on that date (Exa Snapshot) and as it is now. Snapshot isn't used in search: it doesn't work with deep search and drops publish dates; dated search uses `endPublishedDate`. ~5-month window, 100 trial requests
 - [ ] Compare "then vs today" in the UI: fetch the company at both dates, diff with `compareThesis`
 
 ## 6. UI
