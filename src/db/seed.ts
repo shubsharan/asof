@@ -4,11 +4,11 @@ import { createDb, DB_PATH } from "./schema";
 import { createHypothesis } from "./queries";
 
 const COMPANIES = [
-  { id: "exa", name: "Exa", description: "Search engine and API built for AI applications." },
-  { id: "perplexity", name: "Perplexity", description: "AI answer engine; offers the Sonar API to developers." },
-  { id: "brave", name: "Brave", description: "Browser and independent search index; offers the Brave Search API." },
-  { id: "parallel", name: "Parallel", description: "Parallel Web Systems: web search and research APIs for AI agents." },
-  { id: "tavily", name: "Tavily", description: "Search API built for AI agents and LLM applications." },
+  { id: "exa", domain: "exa.ai", name: "Exa", description: "Search engine and API built for AI applications." },
+  { id: "perplexity", domain: "perplexity.ai", name: "Perplexity", description: "AI answer engine; offers the Sonar API to developers." },
+  { id: "brave", domain: "brave.com", name: "Brave", description: "Browser and independent search index; offers the Brave Search API." },
+  { id: "parallel", domain: "parallel.ai", name: "Parallel", description: "Parallel Web Systems: web search and research APIs for AI agents." },
+  { id: "tavily", domain: "tavily.com", name: "Tavily", description: "Search API built for AI agents and LLM applications." },
 ];
 
 // Every target starts from the same four hypotheses.
@@ -23,9 +23,9 @@ for (const suffix of ["", "-wal", "-shm"]) await Bun.file(DB_PATH + suffix).dele
 
 const db = createDb(DB_PATH);
 db.transaction(() => {
-  const insertCompany = db.query("INSERT INTO companies (id, name, description) VALUES (?, ?, ?)");
+  const insertCompany = db.query("INSERT INTO companies (id, name, description, domain) VALUES (?, ?, ?, ?)");
   for (const c of COMPANIES) {
-    insertCompany.run(c.id, c.name, c.description);
+    insertCompany.run(c.id, c.name, c.description, c.domain);
     for (const h of HYPOTHESES) {
       createHypothesis(db, { id: `${c.id}-${h.key}`, companyId: c.id, statement: h.statement });
     }

@@ -11,7 +11,7 @@ import {
 
 function setup() {
   const db = createDb(":memory:");
-  db.run("INSERT INTO companies VALUES ('acme', 'Acme Security', 'Security software')");
+  db.run("INSERT INTO companies (id, name, description, domain) VALUES ('acme', 'Acme Security', 'Security software', 'acme.example')");
   createHypothesis(db, { id: "adoption", companyId: "acme", statement: "Enterprise adoption is accelerating" });
   return db;
 }
@@ -33,6 +33,12 @@ test("a new hypothesis is untested, and evidence alone does not assess it", () =
   recordEvidence(db, "adoption", [item("https://a", "supports", "2026-09-01")], "search", "2026-09-20");
   expect(adoption(db)).toMatchObject({ confidence: undefined, status: "untested", history: [] });
   expect(adoption(db).evidence).toHaveLength(1);
+});
+
+test("evidence nobody has classified reads back with no type, not neutral", () => {
+  const db = setup();
+  recordEvidence(db, "adoption", [{ title: "t", claim: "c", url: "https://a" }], "monitor", "2026-09-20");
+  expect(adoption(db).evidence[0]!.type).toBeUndefined();
 });
 
 test("recordEvidence skips URLs already recorded for the hypothesis", () => {

@@ -1,7 +1,8 @@
 import type { Database } from "bun:sqlite";
-import { assessHypothesis, getCompany, recordEvidence } from "./db/queries";
+import { assessHypothesis, getCompany, recordEvidence, setMonitorId } from "./db/queries";
 import type { Company, Hypothesis } from "./domain/types";
 import { evaluateHypothesis } from "./exa/agent";
+import { createMonitor, monitorEvidence } from "./exa/monitor";
 import { searchEvidence } from "./exa/search";
 
 // Shared by the API routes and the backfill script. `asOf` runs research as of a past date:
@@ -32,4 +33,18 @@ export async function runAgent(db: Database, company: Company, hypothesis: Hypot
     : assessment.reasoning;
   assessHypothesis(db, hypothesis.id, { ...assessment, reasoning, evidenceIds }, asOf);
   return loadHypothesis(db, company.id, hypothesis.id, asOf)!.hypothesis;
+}
+
+/** Starts the company's Exa Agent Monitor, unless it already has one. */
+export async function startMonitor(db: Database, company: Company) {
+  if (!company.monitorId) setMonitorId(db, company.id, await createMonitor(company));
+}
+
+/** Records evidence from the monitor's change feed. Safe to repeat: known URLs are skipped. */
+export async function pullMonitor(db: Database, company: Company) {
+  if (!company.monitorId) return [];
+  const ids = new Set(company.hypotheses.map((h) => h.id));
+  return (await monitorEvidence(company.monitorId))
+    .filter((c) => ids.has(c.hypothesisId))
+    .flatMap((c) => recordEvidence(db, c.hypothesisId, c.evidence, "monitor", c.at));
 }

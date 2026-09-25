@@ -18,6 +18,7 @@ const acme: Company = {
   id: "acme",
   name: "Acme Security",
   description: "",
+  domain: "acme.example",
   hypotheses: [
     {
       id: "moat",

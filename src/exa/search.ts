@@ -61,15 +61,20 @@ export async function searchEvidence(company: Company, hypothesis: Hypothesis, a
     ),
   );
 
-  return responses.flatMap(({ results, output }) => {
-    const byUrl = new Map(results.map((r) => [r.url, r]));
-    const items = (output?.content as { evidence?: Item[] } | undefined)?.evidence ?? [];
-    // Only keep items Exa grounded in an actual result, so title and publish date are real.
-    return items.flatMap((item) => {
-      const r = byUrl.get(item.url);
-      if (!r) return [];
-      const { claim, sourceReasoning, type } = item;
-      return [{ title: r.title ?? r.url, claim, url: r.url, publishedAt: r.publishedDate, type, sourceReasoning }];
-    });
+  return responses.flatMap(({ results, output }) => toEvidence(results, output?.content));
+}
+
+type Result = { url: string; title?: string | null; publishedDate?: string };
+
+/** Turns Exa's screened output into evidence, keeping only items grounded in an actual result. */
+function toEvidence(results: Result[], content: unknown): NewEvidence[] {
+  const byUrl = new Map(results.map((r) => [r.url, r]));
+  const items = (content as { evidence?: Item[] } | undefined)?.evidence ?? [];
+  // Grounding in a real result means title and publish date are real, not generated.
+  return items.flatMap((item) => {
+    const r = byUrl.get(item.url);
+    if (!r) return [];
+    const { claim, sourceReasoning, type } = item;
+    return [{ title: r.title ?? r.url, claim, url: r.url, publishedAt: r.publishedDate, type, sourceReasoning }];
   });
 }

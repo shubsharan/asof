@@ -12,7 +12,8 @@ export type Evidence = {
   publishedAt?: string;
   /** When AsOf first saw it. */
   discoveredAt: string;
-  type: EvidenceType;
+  /** Absent until someone (Search, Agent, triage) has judged its direction. */
+  type?: EvidenceType;
   source: "search" | "agent" | "monitor";
   /** Why the source was judged credible, when the screening step recorded it. */
   sourceReasoning?: string;
@@ -46,5 +47,8 @@ export type Company = {
   id: string;
   name: string;
   description: string;
+  domain: string;
+  /** Exa Agent Monitor tracking this company, once created. */
+  monitorId?: string;
   hypotheses: Hypothesis[];
 };

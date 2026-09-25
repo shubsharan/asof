@@ -9,7 +9,9 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS companies (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
-  description TEXT NOT NULL
+  description TEXT NOT NULL,
+  domain      TEXT NOT NULL,
+  monitor_id  TEXT -- Exa Agent Monitor tracking this company, once created
 );
 
 CREATE TABLE IF NOT EXISTS hypotheses (
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS evidence (
   url           TEXT NOT NULL,
   published_at  TEXT,
   discovered_at TEXT NOT NULL,
-  type          TEXT NOT NULL CHECK (type IN ('supports', 'contradicts', 'neutral')),
+  type          TEXT CHECK (type IN ('supports', 'contradicts', 'neutral')), -- NULL: not yet classified
   source        TEXT NOT NULL CHECK (source IN ('search', 'agent', 'monitor')),
   source_reasoning TEXT,
   UNIQUE (hypothesis_id, url)

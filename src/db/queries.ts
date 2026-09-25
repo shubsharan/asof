@@ -13,7 +13,7 @@ type EvidenceRow = {
   url: string;
   published_at: string | null;
   discovered_at: string;
-  type: Evidence["type"];
+  type: Evidence["type"] | null;
   source: Evidence["source"];
   source_reasoning: string | null;
 };
@@ -36,7 +36,7 @@ const toEvidence = (r: EvidenceRow): Evidence => ({
   url: r.url,
   publishedAt: r.published_at ?? undefined,
   discoveredAt: r.discovered_at,
-  type: r.type,
+  type: r.type ?? undefined,
   source: r.source,
   sourceReasoning: r.source_reasoning ?? undefined,
 });
@@ -53,6 +53,10 @@ const toVersion = (r: VersionRow): HypothesisVersion => ({
 /** Creates an untested hypothesis. It has no confidence until it is assessed against evidence. */
 export function createHypothesis(db: Database, h: { id: string; companyId: string; statement: string }): void {
   db.query("INSERT INTO hypotheses (id, company_id, statement) VALUES (?, ?, ?)").run(h.id, h.companyId, h.statement);
+}
+
+export function setMonitorId(db: Database, companyId: string, monitorId: string): void {
+  db.query("UPDATE companies SET monitor_id = ? WHERE id = ?").run(monitorId, companyId);
 }
 
 /**
@@ -83,7 +87,7 @@ export function recordEvidence(
         url: item.url,
         publishedAt: item.publishedAt ?? null,
         now,
-        type: item.type,
+        type: item.type ?? null,
         source,
         sourceReasoning: item.sourceReasoning ?? null,
       });
@@ -128,12 +132,13 @@ export function assessHypothesis(
 
 /** The company with full history and evidence, as it looked on `asOf` (default: now). */
 export function getCompany(db: Database, id: string, asOf = new Date().toISOString()): Company | undefined {
-  const company = db
-    .query<{ id: string; name: string; description: string }, [string]>(
-      "SELECT id, name, description FROM companies WHERE id = ?",
+  const row = db
+    .query<{ id: string; name: string; description: string; domain: string; monitor_id: string | null }, [string]>(
+      "SELECT id, name, description, domain, monitor_id FROM companies WHERE id = ?",
     )
     .get(id);
-  if (!company) return undefined;
+  if (!row) return undefined;
+  const { monitor_id, ...company } = row;
 
   const hypotheses = db
     .query<{ id: string; statement: string }, [string]>(
@@ -155,6 +160,7 @@ export function getCompany(db: Database, id: string, asOf = new Date().toISOStri
 
   const full: Company = {
     ...company,
+    monitorId: monitor_id ?? undefined,
     hypotheses: hypotheses.map(
       (h): Hypothesis => ({
         ...h,

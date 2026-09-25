@@ -20,12 +20,12 @@
 - [ ] Work out the confidence model with the team + agent (how evidence should move confidence)
 
 ## 3a. Backfill history through the app
-- [ ] Script: for Jan 12 / Mar 1 / Jun 4 / today, search with evidence limited to what was published by that date → `recordEvidence`, then assess dated that day → `assessHypothesis` (reasoning marked as reconstructed)
-- [ ] Freeze the result (copy `data/asof.sqlite` or export JSON) and load it before the demo
+- [x] Script: for Jan 12 / Mar 1 / Jun 4 / today, search with evidence limited to what was published by that date → `recordEvidence`, then assess dated that day → `assessHypothesis` (reasoning marked as reconstructed)
+- [x] Freeze the result: copy `data/asof.sqlite` to `data/demo.sqlite` (done); copy it back before the demo
 
 ## 4. Exa Monitor
-- [ ] One monitor per hypothesis (`POST /api/monitor/create`)
-- [ ] `GET /api/monitor/events`; new items flow through `recordEvidence`
+- [x] One Exa Agent Monitor (beta) per company, one field per hypothesis, daily (`POST /api/companies/:id/monitor`). Standard Monitors need a public HTTPS webhook, so not used
+- [x] `POST /api/companies/:id/monitor/pull`: change feed → `recordEvidence` unclassified (`type` absent; direction via Jev triage, 4a, or the next assessment). The events feed is evidence with `source: "monitor"`
 
 ## 4a. Jev triage (TypeSafe AI)
 Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `reasoning` / `openQuestions`.
