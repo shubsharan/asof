@@ -3,7 +3,7 @@
 ## 1. Thesis machinery
 - [x] Types in `src/domain/types.ts` (Company, Hypothesis, HypothesisVersion, Evidence)
 - [x] SQLite schema in `src/db/schema.ts` — hypothesis history is append-only; "current" = latest version
-- [ ] Thesis logic in `src/domain/thesis.ts`: status from confidence, evidence nudge, `thesisAsOf(date)`, compare two dates
+- [x] Thesis logic in `src/domain/thesis.ts`: status from confidence, evidence nudge, `thesisAsOf(date)`, compare two dates
 - [ ] Repo functions: `recordEvidence`, `getCompany(asOf?)`, `listPortfolio`
 - [ ] Seed Acme (4 hypotheses, history on Jan 12 / Mar 1 / Jun 4 / today, ~10 evidence items) + Northstar, Vector
 - [ ] `server.ts` replaces `index.ts`; routes: portfolio, company, hypothesis, compare (all accept `?asOf=`)
