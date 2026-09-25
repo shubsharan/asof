@@ -16,7 +16,7 @@ const OUTPUT_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          url: { type: "string", format: "uri" },
+          url: { type: "string" },
           title: { type: "string" },
           claim: { type: "string" },
           publishedAt: { type: "string" },
@@ -43,25 +43,16 @@ export async function evaluateHypothesis(company: Company, hypothesis: Hypothesi
     effort: "auto",
     query: `Evaluate the investment hypothesis about ${company.name} (${company.description}): "${hypothesis.statement}".
 Current assessment: ${current ? `${current.confidence}% ${current.status}. ${current.reasoning}` : "untested, no prior assessment"}.
-The input data is the evidence already recorded (url, claim, type, sourceReasoning, publishedAt). Research further as
-needed, especially evidence that contradicts the hypothesis and the credibility of the key sources. Then assess:
-- confidence: 0-100, your probability that the hypothesis is true. There is no fixed model. In reasoning, explain how
-  you weighed the evidence (credibility, independence, self-reported vs independent, recency) so the team can review
-  and refine the method.
-- status: supported, mixed, at-risk or contradicted.
+The input data is the evidence already recorded. Research further as needed, especially evidence that
+contradicts the hypothesis and the credibility of the key sources. Then assess:
+- confidence: your probability that the hypothesis is true. There is no fixed model. In reasoning, explain how
+  you weighed the evidence (credibility, independence, self-reported vs independent, recency) so the team can
+  review and refine the method.
 - citedUrls: the URLs, from the input data or newEvidence, that the assessment rests on.
-- newEvidence: credible sources you found that are not in the input data. claim states the specific fact the page
-  reports; sourceReasoning says who published it and how credible it is.
+- newEvidence: credible sources not in the input data. claim states the specific fact the page reports;
+  sourceReasoning says who published it and how credible it is.
 - openQuestions: what would most change your view.`,
-    input: {
-      data: hypothesis.evidence.map(({ url, claim, type, sourceReasoning, publishedAt }) => ({
-        url,
-        claim,
-        type,
-        sourceReasoning,
-        publishedAt,
-      })),
-    },
+    input: { data: hypothesis.evidence },
     outputSchema: OUTPUT_SCHEMA,
   }, { timeoutMs: 15 * 60_000 }); // runs take several minutes; the SDK default gives up at 2
   console.log(`Agent run ${run.id}: ${run.stopReason}, $${run.costDollars?.total}`);
