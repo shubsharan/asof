@@ -51,8 +51,8 @@ const toVersion = (r: VersionRow): HypothesisVersion => ({
 });
 
 /** Creates an untested hypothesis. It has no confidence until it is assessed against evidence. */
-export function createHypothesis(db: Database, h: { id: string; companyId: string; statement: string }): void {
-  db.query("INSERT INTO hypotheses (id, company_id, statement) VALUES (?, ?, ?)").run(h.id, h.companyId, h.statement);
+export function createHypothesis(db: Database, h: { id: string; companyId: string; lens: string; statement: string }): void {
+  db.query("INSERT INTO hypotheses (id, company_id, lens, statement) VALUES (?, ?, ?, ?)").run(h.id, h.companyId, h.lens, h.statement);
 }
 
 export function setMonitorId(db: Database, companyId: string, monitorId: string): void {
@@ -141,8 +141,8 @@ export function getCompany(db: Database, id: string, asOf = new Date().toISOStri
   const { monitor_id, ...company } = row;
 
   const hypotheses = db
-    .query<{ id: string; statement: string }, [string]>(
-      "SELECT id, statement FROM hypotheses WHERE company_id = ? ORDER BY rowid",
+    .query<{ id: string; lens: string; statement: string }, [string]>(
+      "SELECT id, lens, statement FROM hypotheses WHERE company_id = ? ORDER BY rowid",
     )
     .all(id);
   const versions = db
@@ -173,23 +173,10 @@ export function getCompany(db: Database, id: string, asOf = new Date().toISOStri
   return thesisAsOf(full, asOf);
 }
 
-export type PortfolioEntry = {
-  id: string;
-  name: string;
-  hypothesisCount: number;
-  /** Assessments made in the 7 days before `now`. */
-  changesThisWeek: number;
-};
-
-export function listPortfolio(db: Database, now = new Date().toISOString()): PortfolioEntry[] {
-  const weekAgo = new Date(Date.parse(now) - 7 * 24 * 60 * 60 * 1000).toISOString();
+/** Every company as it looked on `asOf`, via `getCompany`, so cross-company views share its as-of rules. */
+export function listCompanies(db: Database, asOf?: string): Company[] {
   return db
-    .query<PortfolioEntry, { weekAgo: string; now: string }>(
-      `SELECT c.id, c.name,
-         (SELECT count(*) FROM hypotheses h WHERE h.company_id = c.id) AS hypothesisCount,
-         (SELECT count(*) FROM hypothesis_versions v JOIN hypotheses h ON h.id = v.hypothesis_id
-          WHERE h.company_id = c.id AND v.as_of > $weekAgo AND v.as_of <= $now) AS changesThisWeek
-       FROM companies c ORDER BY c.rowid`,
-    )
-    .all({ weekAgo, now });
+    .query<{ id: string }, []>("SELECT id FROM companies ORDER BY rowid")
+    .all()
+    .map((c) => getCompany(db, c.id, asOf)!);
 }

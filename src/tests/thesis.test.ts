@@ -22,6 +22,7 @@ const acme: Company = {
   hypotheses: [
     {
       id: "moat",
+      lens: "moat",
       statement: "Competitive moat is strengthening",
       status: "untested",
       history: [
@@ -32,6 +33,7 @@ const acme: Company = {
     },
     {
       id: "retention",
+      lens: "retention",
       statement: "Enterprise retention is strong",
       status: "untested",
       history: [{ asOf: "2026-06-01", confidence: 70, status: "supported", reasoning: "", evidenceIds: ["x"], openQuestions: [] }],

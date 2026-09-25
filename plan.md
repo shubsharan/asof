@@ -25,7 +25,7 @@
 
 ## 4. Exa Monitor
 - [x] One Exa Agent Monitor (beta) per company, one field per hypothesis, daily (`POST /api/companies/:id/monitor`). Standard Monitors need a public HTTPS webhook, so not used
-- [x] `POST /api/companies/:id/monitor/pull`: change feed → `recordEvidence` unclassified (`type` absent; direction via Jev triage, 4a, or the next assessment). The events feed is evidence with `source: "monitor"`
+- [x] Monitor pull: change feed → `recordEvidence` unclassified (`type` absent; direction via Jev triage, 4a, or the next assessment). The events feed is evidence with `source: "monitor"`. Now a `monitor` research run (manual or scheduled, see 7), which also creates the monitor on first run; no longer pulled on page visit
 
 ## 4a. Jev triage (TypeSafe AI)
 Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `reasoning` / `openQuestions`.
@@ -45,7 +45,26 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 
 ## 6. UI
 - [x] `src/index.html` + `src/main.tsx` (React via Bun HTML imports) + Tailwind v4 (`bun-plugin-tailwind` in `bunfig.toml`) + shadcn (`components.json`, add components with `bunx --bun shadcn@latest add <name>`)
-- [x] Portfolio → Target overview → Hypothesis detail → Rewind timeline (`/`, `/c/:id`, `/c/:id/h/:hid`, `?asOf=`)
+- [x] Portfolio → Target overview → Hypothesis detail → Rewind timeline (`/`, `/c/:id`, `/c/:id/h/:hid`, `?asOf=`) — superseded by 7
+
+## 7. Navigation & research runs (superseded by 8)
+- [x] Runs (`runs` table): search / agent / monitor against a target, `manual` or `schedule` trigger, queued → running → done/failed with a result. In-process runner (`src/runner.ts`, concurrency 2, de-duplicates by target); `POST /api/runs` returns immediately
+- [x] Schedules (`schedules` table) + in-process scheduler (`src/scheduler.ts`, ticks every minute; an overdue schedule fires once)
+- [x] Updates feed (`src/domain/updates.ts`): assessments with before/after, evidence batched per hypothesis per day it became knowable, failed runs
+- [x] ~~Feature-first sidebar (Updates · Companies · Hypotheses · Evidence · Research), company record tabs, as-of picker + banner~~ — replaced by 8
+
+## 8. One time axis, one cursor, three zoom levels
+The visual thesis: every assessment is a point on a confidence-over-time step chart (`ConfidenceStrip`), evidence sits on the same axis where it became knowable, and the as-of date is one vertical cursor; everything right of it is dimmed because it wasn't known yet.
+- [x] Hypotheses carry a `lens` (shared across companies, e.g. `moat`); `migrate()` in `src/db/schema.ts` upgrades older databases from the `${companyId}-${lens}` ids
+- [x] `src/domain/timeline.ts`: shared time domain, day scale, assessment days, lenses, step segments, evidence ticks (all UTC days, like `thesisAsOf`)
+- [x] `GET /api/companies` serves the whole portfolio once; the client rewinds it with `thesisAsOf` (`src/components/portfolio.tsx`), so scrubbing never hits the network
+- [x] `TimeScrubber` in the sticky header: snap points on assessment days, drag / click / ← →; the date is committed to `?asOf=` on release (`src/components/asof.ts`). Its track shares `main`'s width, so the cursor lines up with the strips
+- [x] Sidebar (`AppSidebar.tsx`): Portfolio (companies below it), Hypotheses (lenses below it), Updates, Settings; Research opens from its footer
+- [x] Views on one primitive: `/` portfolio matrix (companies × lenses, `Matrix.tsx`), `/hypotheses[/:lens]` a lens across companies (`Hypotheses.tsx`), `/c/:id` a company across lenses (`Company.tsx`), `/c/:id/h/:hid` one cell (`HypothesisDetail.tsx`: the assessment at the cursor, cited evidence, Snapshot when rewound). Rows share `StripRow.tsx`
+- [x] `/updates`: the changes feed up to the cursor, filterable by company (`Updates.tsx`)
+- [x] `/settings`: research schedules. Research (run now + run history) is a panel (`ResearchSheet.tsx`), opened from the sidebar or `openResearch(target)`
+- [ ] Column sort in the matrix, once more than one company has history
+- [ ] Backfill Perplexity, Brave, Parallel and Tavily so the matrix compares across companies (`bun run backfill <companyId>`, spends Exa credits)
 
 ## Notes
 - All code and tests live under `src/` (tests in `src/tests/`, generated data in `data/`); nothing but config at the repo root.

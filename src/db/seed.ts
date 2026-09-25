@@ -27,7 +27,7 @@ db.transaction(() => {
   for (const c of COMPANIES) {
     insertCompany.run(c.id, c.name, c.description, c.domain);
     for (const h of HYPOTHESES) {
-      createHypothesis(db, { id: `${c.id}-${h.key}`, companyId: c.id, statement: h.statement });
+      createHypothesis(db, { id: `${c.id}-${h.key}`, companyId: c.id, lens: h.key, statement: h.statement });
     }
   }
 })();
