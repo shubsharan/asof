@@ -25,6 +25,7 @@ type VersionRow = {
   status: HypothesisStatus;
   reasoning: string;
   evidence_ids: string;
+  open_questions: string;
 };
 
 const toEvidence = (r: EvidenceRow): Evidence => ({
@@ -46,6 +47,7 @@ const toVersion = (r: VersionRow): HypothesisVersion => ({
   status: r.status,
   reasoning: r.reasoning,
   evidenceIds: JSON.parse(r.evidence_ids),
+  openQuestions: JSON.parse(r.open_questions),
 });
 
 /** Creates an untested hypothesis. It has no confidence until it is assessed against evidence. */
@@ -111,9 +113,17 @@ export function assessHypothesis(
     throw new Error(`Assessment cites evidence not recorded for hypothesis ${hypothesisId}`);
   }
   db.query(
-    `INSERT INTO hypothesis_versions (hypothesis_id, as_of, confidence, status, reasoning, evidence_ids)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(hypothesisId, now, assessment.confidence, assessment.status, assessment.reasoning, JSON.stringify(evidenceIds));
+    `INSERT INTO hypothesis_versions (hypothesis_id, as_of, confidence, status, reasoning, evidence_ids, open_questions)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    hypothesisId,
+    now,
+    assessment.confidence,
+    assessment.status,
+    assessment.reasoning,
+    JSON.stringify(evidenceIds),
+    JSON.stringify(assessment.openQuestions),
+  );
 }
 
 /** The company with full history and evidence, as it looked on `asOf` (default: now). */

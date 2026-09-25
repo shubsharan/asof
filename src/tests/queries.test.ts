@@ -45,16 +45,17 @@ test("recordEvidence skips URLs already recorded for the hypothesis", () => {
 test("assessHypothesis records the assessor's judgement, citing evidence", () => {
   const db = setup();
   const [a] = recordEvidence(db, "adoption", [item("https://a", "supports", "2026-02-01")], "search", "2026-02-01");
-  assessHypothesis(db, "adoption", { confidence: 74, status: "supported", reasoning: "Early wins", evidenceIds: [a!.id] }, "2026-03-01");
+  assessHypothesis(db, "adoption", { confidence: 74, status: "supported", reasoning: "Early wins", evidenceIds: [a!.id], openQuestions: ["Retention?"] }, "2026-03-01");
 
   expect(adoption(db)).toMatchObject({ confidence: 74, status: "supported" });
+  expect(adoption(db).history[0]!.openQuestions).toEqual(["Retention?"]);
   expect(adoption(db, "2026-02-15")).toMatchObject({ status: "untested" });
 });
 
 test("assessHypothesis refuses assessments without recorded evidence", () => {
   const db = setup();
   const assess = (evidenceIds: string[]) =>
-    assessHypothesis(db, "adoption", { confidence: 60, status: "mixed", reasoning: "", evidenceIds });
+    assessHypothesis(db, "adoption", { confidence: 60, status: "mixed", reasoning: "", evidenceIds, openQuestions: [] });
   expect(() => assess([])).toThrow(/must cite evidence/);
   expect(() => assess(["made-up"])).toThrow(/not recorded/);
   expect(adoption(db).history).toEqual([]);
@@ -63,7 +64,7 @@ test("assessHypothesis refuses assessments without recorded evidence", () => {
 test("listPortfolio counts hypotheses and this week's assessments", () => {
   const db = setup();
   const [a] = recordEvidence(db, "adoption", [item("https://a", "supports")], "search", "2026-09-20");
-  assessHypothesis(db, "adoption", { confidence: 70, status: "supported", reasoning: "", evidenceIds: [a!.id] }, "2026-09-20");
+  assessHypothesis(db, "adoption", { confidence: 70, status: "supported", reasoning: "", evidenceIds: [a!.id], openQuestions: [] }, "2026-09-20");
   expect(listPortfolio(db, "2026-09-24")).toEqual([
     { id: "acme", name: "Acme Security", hypothesisCount: 1, changesThisWeek: 1 },
   ]);

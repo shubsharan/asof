@@ -1,8 +1,6 @@
-import Exa from "exa-js";
 import type { NewEvidence } from "../db/queries";
 import type { Company, Hypothesis } from "../domain/types";
-
-const exa = new Exa(Bun.env.EXA_API_KEY);
+import { exa } from "./client";
 
 // Exa synthesizes this from the results. Per item it reasons about the source before judging direction.
 const OUTPUT_SCHEMA = {

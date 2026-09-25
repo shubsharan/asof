@@ -28,6 +28,8 @@ export type HypothesisVersion = {
   status: HypothesisStatus;
   reasoning: string;
   evidenceIds: string[];
+  /** What would most change the assessment. */
+  openQuestions: string[];
 };
 
 export type Hypothesis = {
