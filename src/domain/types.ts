@@ -16,10 +16,14 @@ export type Evidence = {
   source: "search" | "agent" | "monitor";
 };
 
-/** One append-only entry in a hypothesis's history. The latest one is its current state. */
+/**
+ * One append-only assessment of a hypothesis; the latest is its current state.
+ * Always cites at least one piece of evidence. How confidence is judged is up to the assessor.
+ */
 export type HypothesisVersion = {
   asOf: string;
   confidence: number;
+  status: HypothesisStatus;
   reasoning: string;
   evidenceIds: string[];
 };
@@ -27,10 +31,9 @@ export type HypothesisVersion = {
 export type Hypothesis = {
   id: string;
   statement: string;
-  /** From the latest version. */
-  confidence: number;
-  /** Derived from confidence. */
-  status: HypothesisStatus;
+  /** From the latest version. Absent until the hypothesis has been assessed against evidence. */
+  confidence?: number;
+  status: HypothesisStatus | "untested";
   evidence: Evidence[];
   history: HypothesisVersion[];
 };

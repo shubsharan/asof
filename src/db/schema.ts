@@ -18,8 +18,9 @@ CREATE TABLE IF NOT EXISTS hypothesis_versions (
   hypothesis_id TEXT NOT NULL REFERENCES hypotheses(id),
   as_of         TEXT NOT NULL,
   confidence    INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+  status        TEXT NOT NULL CHECK (status IN ('supported', 'mixed', 'at-risk', 'contradicted')),
   reasoning     TEXT NOT NULL,
-  evidence_ids  TEXT NOT NULL DEFAULT '[]' -- JSON array of evidence.id
+  evidence_ids  TEXT NOT NULL CHECK (json_array_length(evidence_ids) > 0) -- JSON array of evidence.id
 );
 CREATE INDEX IF NOT EXISTS hypothesis_versions_by_date ON hypothesis_versions (hypothesis_id, as_of);
 

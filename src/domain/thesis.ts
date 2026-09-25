@@ -1,24 +1,4 @@
-import type { Company, Evidence, Hypothesis, HypothesisStatus } from "./types";
-
-const NUDGE_STEP = 5;
-const MIN_CONFIDENCE = 5;
-const MAX_CONFIDENCE = 95;
-
-export function statusFromConfidence(confidence: number): HypothesisStatus {
-  if (confidence >= 70) return "supported";
-  if (confidence >= 60) return "mixed";
-  if (confidence >= 45) return "at-risk";
-  return "contradicted";
-}
-
-/** Moves confidence a fixed step per supporting/contradicting item. Agent results bypass this. */
-export function nudge(confidence: number, evidence: Pick<Evidence, "type">[]): number {
-  const delta = evidence.reduce(
-    (sum, e) => sum + (e.type === "supports" ? NUDGE_STEP : e.type === "contradicts" ? -NUDGE_STEP : 0),
-    0,
-  );
-  return Math.min(MAX_CONFIDENCE, Math.max(MIN_CONFIDENCE, confidence + delta));
-}
+import type { Company, Evidence, Hypothesis } from "./types";
 
 // Dates are compared by day, so anything on the as-of date itself counts as known.
 const day = (iso: string) => iso.slice(0, 10);
@@ -27,23 +7,20 @@ const day = (iso: string) => iso.slice(0, 10);
 const knownAt = (e: Evidence) => e.publishedAt ?? e.discoveredAt;
 
 /**
- * The thesis as it looked on `date`: each hypothesis at its latest version on or before
- * that day, with only the evidence published by then. Hypotheses with no version yet are dropped.
+ * The thesis as it looked on `date`: each hypothesis at its latest assessment on or before
+ * that day, with only the evidence published by then. Unassessed hypotheses are "untested".
  */
 export function thesisAsOf(company: Company, date: string): Company {
-  const hypotheses = company.hypotheses.flatMap((h): Hypothesis[] => {
+  const hypotheses = company.hypotheses.map((h): Hypothesis => {
     const history = h.history.filter((v) => day(v.asOf) <= day(date));
     const latest = history.at(-1);
-    if (!latest) return [];
-    return [
-      {
-        ...h,
-        confidence: latest.confidence,
-        status: statusFromConfidence(latest.confidence),
-        history,
-        evidence: h.evidence.filter((e) => day(knownAt(e)) <= day(date)),
-      },
-    ];
+    return {
+      ...h,
+      confidence: latest?.confidence,
+      status: latest?.status ?? "untested",
+      history,
+      evidence: h.evidence.filter((e) => day(knownAt(e)) <= day(date)),
+    };
   });
   return { ...company, hypotheses };
 }
@@ -51,8 +28,8 @@ export function thesisAsOf(company: Company, date: string): Company {
 export type HypothesisChange = {
   id: string;
   statement: string;
-  before?: { confidence: number; status: HypothesisStatus };
-  after: { confidence: number; status: HypothesisStatus };
+  before: Pick<Hypothesis, "confidence" | "status">;
+  after: Pick<Hypothesis, "confidence" | "status">;
   newEvidence: Evidence[];
 };
 
@@ -64,7 +41,7 @@ export function compareThesis(before: Company, after: Company): HypothesisChange
     return {
       id: h.id,
       statement: h.statement,
-      before: prev && { confidence: prev.confidence, status: prev.status },
+      before: { confidence: prev?.confidence, status: prev?.status ?? "untested" },
       after: { confidence: h.confidence, status: h.status },
       newEvidence: h.evidence.filter((e) => !seen.has(e.id)),
     };
