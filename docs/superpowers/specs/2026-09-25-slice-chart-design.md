@@ -103,7 +103,7 @@ type Props = {
   asOf?: string;
   today: string;
   onPickDate: (day: string) => void;
-  avatar?: (row: SliceRow) => ReactNode;  // CompanyAvatar on the hypothesis page; none on the company page
+  avatar?: (rowId: string) => ReactNode;  // hypothesis page looks the company up by id and returns CompanyAvatar; company page omits it
 };
 ```
 
@@ -138,7 +138,7 @@ Empty state: with no slice days the component renders nothing (the pages already
 
 ## 4. Integration
 
-- `Hypotheses.tsx`: when `hypothesisId` is set, render `<SliceChart rows={companyRows(companies, id)} … avatar />`
+- `Hypotheses.tsx`: when `hypothesisId` is set, render `<SliceChart rows={companyRows(companies, id)} avatar={(rowId) => <CompanyAvatar company={byId(rowId)} />} … />`
   between the heading and the strip rows. The all-hypotheses list does not get a chart.
 - `Company.tsx`: render `<SliceChart rows={hypothesisRows(full)} … />` between the header and the
   strip rows.
