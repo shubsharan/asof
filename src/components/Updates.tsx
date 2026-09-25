@@ -43,7 +43,7 @@ export function Updates() {
       </div>
       {loaded && updates.length === 0 && <p className="text-sm text-muted-foreground">Nothing yet. Start a run from Runs in the sidebar.</p>}
       {updates.length > 0 && (
-        <div className="rounded-lg border">
+        <div className="rounded border">
           <Table>
             <TableHeader>
               <TableRow>

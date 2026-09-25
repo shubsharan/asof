@@ -65,7 +65,7 @@ export function TimeScrubber({ leading }: { leading?: ReactNode }) {
         aria-valuemin={0}
         aria-valuemax={stops.length - 1}
         aria-valuenow={Math.max(0, stops.indexOf(asOf ?? today))}
-        className="relative order-last min-w-0 basis-full cursor-ew-resize sm:order-none sm:basis-0 sm:flex-1 sm:translate-y-1 touch-none outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
+        className="relative order-last min-w-0 basis-full cursor-ew-resize sm:order-none sm:basis-0 sm:flex-1 sm:translate-y-1 touch-none outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
         style={{ height: HEIGHT }}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);

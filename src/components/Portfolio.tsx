@@ -124,7 +124,7 @@ function HypothesisCard({ hypothesis: ph, rows, busy }: { hypothesis: PortfolioH
                       <CompanyAvatar company={c} className={`size-6 ${untested ? "opacity-60 grayscale" : ""}`} />
                       <span className={`truncate ${untested ? "text-muted-foreground" : "font-medium"}`}>{c.name}</span>
                       {(busy.has(`${c.id}/${h.id}`) || busy.has(`${c.id}/`)) && (
-                        <span className="size-2 shrink-0 animate-pulse rounded-full bg-sky-500" title="Research running" />
+                        <span className="size-2 shrink-0 animate-pulse rounded bg-sky-500" title="Research running" />
                       )}
                     </a>
                   </TableCell>

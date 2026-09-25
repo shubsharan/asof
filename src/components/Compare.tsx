@@ -26,7 +26,7 @@ const TD = "border-t py-2.5 align-middle";
 export function CompanyCompare({ view, full, asOf }: { view: Company; full: Company; asOf: string }) {
   const changes = compareThesis(view, full);
   return (
-    <section className="overflow-x-auto rounded-lg border px-4 pt-2 pb-3">
+    <section className="overflow-x-auto rounded border px-4 pt-2 pb-3">
       <table className="w-full min-w-[560px] text-sm">
         <thead>
           <tr>
@@ -76,7 +76,7 @@ export function HypothesisCompare({ view, full, asOf }: { view: Hypothesis; full
     ["Open questions", latest(view)?.openQuestions.length ?? "—", latest(full)?.openQuestions.length ?? "—"],
   ];
   return (
-    <section className="overflow-x-auto rounded-lg border px-4 pt-2 pb-3">
+    <section className="overflow-x-auto rounded border px-4 pt-2 pb-3">
       <table className="w-full min-w-[420px] text-sm">
         <thead>
           <tr>

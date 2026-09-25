@@ -114,9 +114,9 @@ export const logoUrl = (domain: string) => `https://www.google.com/s2/favicons?d
 
 export function CompanyAvatar({ company, className = "size-6" }: { company: Pick<Company, "name" | "domain">; className?: string }) {
   return (
-    <Avatar className={`rounded-md border bg-background ${className}`}>
+    <Avatar className={`rounded border bg-background ${className}`}>
       <AvatarImage src={logoUrl(company.domain)} alt="" className="object-contain p-0.5" />
-      <AvatarFallback className="rounded-md text-[0.65em] font-medium">{company.name.charAt(0)}</AvatarFallback>
+      <AvatarFallback className="rounded text-[0.65em] font-medium">{company.name.charAt(0)}</AvatarFallback>
     </Avatar>
   );
 }

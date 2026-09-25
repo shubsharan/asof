@@ -33,7 +33,7 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <a href={link("/")}>
-                <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary font-mono text-sm text-primary-foreground">A</span>
+                <span className="flex aspect-square size-8 items-center justify-center rounded bg-primary font-mono text-sm text-primary-foreground">A</span>
                 <span className="font-semibold">AsOf</span>
               </a>
             </SidebarMenuButton>
