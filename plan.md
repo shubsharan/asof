@@ -53,7 +53,7 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 - [x] Updates feed (`src/domain/updates.ts`): assessments with before/after, evidence batched per hypothesis per day it became knowable, failed runs
 - [x] ~~Feature-first sidebar (Updates · Companies · Hypotheses · Evidence · Research), company record tabs, as-of picker + banner~~ — replaced by 8
 
-## 8. One time axis, one cursor, three zoom levels
+## 8. One time axis, one cursor, three zoom levels (lenses and matrix superseded by 9)
 The visual thesis: every assessment is a point on a confidence-over-time step chart (`ConfidenceStrip`), evidence sits on the same axis where it became knowable, and the as-of date is one vertical cursor; everything right of it is dimmed because it wasn't known yet.
 - [x] Hypotheses carry a `lens` (shared across companies, e.g. `moat`); `migrate()` in `src/db/schema.ts` upgrades older databases from the `${companyId}-${lens}` ids
 - [x] `src/domain/timeline.ts`: shared time domain, day scale, assessment days, lenses, step segments, evidence ticks (all UTC days, like `thesisAsOf`)
@@ -65,6 +65,15 @@ The visual thesis: every assessment is a point on a confidence-over-time step ch
 - [x] `/settings`: research schedules. Research (run now + run history) is a panel (`ResearchSheet.tsx`), opened from the sidebar or `openResearch(target)`
 - [ ] Column sort in the matrix, once more than one company has history
 - [ ] Backfill Perplexity, Brave, Parallel and Tavily so the matrix compares across companies (`bun run backfill <companyId>`, spends Exa credits)
+
+## 9. Data model cleanup
+- [x] Hypotheses are portfolio-level (`hypotheses(id, name, statement)`); versions and evidence are keyed by `(company_id, hypothesis_id)`. No more lenses: `/hypotheses/:id` and `/c/:id/h/:hypothesisId` use the same id (`moat`)
+- [x] One vocabulary: evidence `type` and assessment `verdict` are both `supports | neutral | contradicts`; `confidence` is confidence in the verdict (agent prompt in `src/exa/agent.ts`)
+- [x] Runs and schedules by job: `research` (Exa Search), `assess` (Exa Agent), `watch` (Exa Monitor); `evidence.source` still records the tool
+- [x] Versioned migrations (`PRAGMA user_version`) in `src/db/schema.ts`; v2 rebuilds older databases, the frozen demo included. Legacy monitor fields (`exa-moat`) map to the new ids
+- [x] Portfolio is hypothesis cards (one row per company); Updates is an evidence table; the sidebar's Research panel is now Runs
+- [ ] Re-assess history with the new prompt: `bun run backfill exa --reset` (16 Agent runs), then refreeze `data/demo.sqlite`
+- [ ] `ConfidenceStrip` plots confidence-in-verdict; a flip from 70% supports to 70% contradicts draws flat. Consider a signed "lean" axis once real data is in
 
 ## Notes
 - All code and tests live under `src/` (tests in `src/tests/`, generated data in `data/`); nothing but config at the repo root.

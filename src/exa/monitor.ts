@@ -23,13 +23,15 @@ export async function createMonitor(company: Company): Promise<string> {
 }
 
 /**
- * Evidence from a monitor's change feed, per hypothesis. Changes carry no direction,
- * so evidence arrives unclassified until triaged or weighed in an assessment.
+ * Evidence from a company's monitor change feed, per hypothesis. Changes carry no direction,
+ * so evidence arrives unclassified until weighed in an assessment.
+ * Monitors created before hypotheses were portfolio-wide name fields `${companyId}-${hypothesisId}`.
  */
-export async function monitorEvidence(monitorId: string): Promise<{ hypothesisId: string; at: string; evidence: NewEvidence[] }[]> {
-  const changes = await exa.beta.agent.monitors.changes.getAll(monitorId, { betas });
+export async function monitorEvidence(company: Company): Promise<{ hypothesisId: string; at: string; evidence: NewEvidence[] }[]> {
+  const changes = await exa.beta.agent.monitors.changes.getAll(company.monitorId!, { betas });
+  const legacy = `${company.id}-`;
   return changes.map((c) => ({
-    hypothesisId: c.field.name!,
+    hypothesisId: c.field.name!.startsWith(legacy) ? c.field.name!.slice(legacy.length) : c.field.name!,
     at: c.createdAt,
     evidence: (c.content.citations ?? []).map((cite) => ({
       title: cite.title ?? cite.url,

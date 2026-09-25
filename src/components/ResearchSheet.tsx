@@ -22,8 +22,8 @@ export function ResearchSheet() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-3xl">
         <SheetHeader>
-          <SheetTitle>Research</SheetTitle>
-          <SheetDescription>Start an Exa search, agent run or monitor pull, and follow the ones in flight.</SheetDescription>
+          <SheetTitle>Runs</SheetTitle>
+          <SheetDescription>Research, assess or watch, and follow the runs in flight.</SheetDescription>
         </SheetHeader>
         <div className="grid gap-8 px-4 pb-6">
           <RunNow key={`${initial?.companyId}-${initial?.hypothesisId}`} company={company} initial={initial} />

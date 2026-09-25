@@ -108,7 +108,7 @@ export function TimeScrubber({ leading }: { leading?: ReactNode }) {
       </div>
 
       {/* Reserve the space so the track doesn't jump when the button appears. */}
-      <Button variant="ghost" size="sm" className={`ml-auto h-7 shrink-0 px-2 text-xs sm:ml-0 ${asOf ? "" : "invisible"}`} onClick={() => commit(today)} tabIndex={asOf ? 0 : -1}>
+      <Button variant={asOf ? "default" : "ghost"} size="sm" className={`ml-auto h-7 shrink-0 px-2.5 text-xs sm:ml-0 ${asOf ? "" : "invisible"}`} onClick={() => commit(today)} tabIndex={asOf ? 0 : -1}>
         Back to today
       </Button>
     </div>

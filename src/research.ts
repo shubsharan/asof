@@ -5,8 +5,8 @@ import { evaluateHypothesis } from "./exa/agent";
 import { createMonitor, monitorEvidence } from "./exa/monitor";
 import { searchEvidence } from "./exa/search";
 
-// Shared by the API routes and the backfill script. `asOf` runs research as of a past date:
-// only evidence published by then, and the assessment is dated that day.
+// The three research jobs, shared by the runner and the backfill script. `asOf` runs a job as of a
+// past date: only evidence published by then, and the assessment is dated that day.
 
 /** Loads a company and one of its hypotheses as they stood on `asOf` (default: now). */
 export function loadHypothesis(db: Database, companyId: string, hypothesisId: string, asOf?: string) {
@@ -15,35 +15,38 @@ export function loadHypothesis(db: Database, companyId: string, hypothesisId: st
   return company && hypothesis ? { company, hypothesis } : undefined;
 }
 
-/** Exa Search → recorded evidence. Returns what was newly added. */
-export async function runSearch(db: Database, company: Company, hypothesis: Hypothesis, asOf?: string) {
-  return recordEvidence(db, hypothesis.id, await searchEvidence(company, hypothesis, asOf), "search");
+/** Research: find and tag evidence for a company's hypothesis (Exa Search). Returns what was newly added. */
+export async function runResearch(db: Database, company: Company, hypothesis: Hypothesis, asOf?: string) {
+  return recordEvidence(db, company.id, hypothesis.id, await searchEvidence(company, hypothesis, asOf), "search");
 }
 
-/** Exa Agent → new evidence plus an assessment citing it. Returns the updated hypothesis. */
-export async function runAgent(db: Database, company: Company, hypothesis: Hypothesis, asOf?: string) {
+/**
+ * Assess: a verdict and confidence for a company's hypothesis (Exa Agent). The agent may find
+ * sources along the way; the ones it keeps are recorded so the assessment can cite them.
+ * Returns the updated hypothesis.
+ */
+export async function runAssess(db: Database, company: Company, hypothesis: Hypothesis, asOf?: string) {
   const { citedUrls, newEvidence, ...assessment } = await evaluateHypothesis(company, hypothesis, asOf);
   // The Agent can't be date-limited by the API, so enforce the cutoff on what it brings back.
   const inWindow = asOf ? newEvidence.filter((e) => e.publishedAt && e.publishedAt.slice(0, 10) <= asOf) : newEvidence;
-  const added = recordEvidence(db, hypothesis.id, inWindow, "agent");
+  const added = recordEvidence(db, company.id, hypothesis.id, inWindow, "agent");
   const cited = new Set(citedUrls);
   const evidenceIds = [...hypothesis.evidence, ...added].filter((e) => cited.has(e.url)).map((e) => e.id);
   const reasoning = asOf
     ? `Reconstructed on ${new Date().toISOString().slice(0, 10)} from evidence published by ${asOf}. ${assessment.reasoning}`
     : assessment.reasoning;
-  assessHypothesis(db, hypothesis.id, { ...assessment, reasoning, evidenceIds }, asOf);
+  assessHypothesis(db, company.id, hypothesis.id, { ...assessment, reasoning, evidenceIds }, asOf);
   return loadHypothesis(db, company.id, hypothesis.id, asOf)!.hypothesis;
 }
 
-/** Starts the company's Exa Agent Monitor, unless it already has one. */
-export async function startMonitor(db: Database, company: Company) {
-  if (!company.monitorId) setMonitorId(db, company.id, await createMonitor(company));
-}
-
-/** Records evidence from the monitor's change feed. Safe to repeat: known URLs are skipped. */
-export async function pullMonitor(db: Database, company: Company) {
-  if (!company.monitorId) return [];
-  return (await monitorEvidence(company.monitorId)).flatMap((c) =>
-    recordEvidence(db, c.hypothesisId, c.evidence, "monitor", c.at),
-  );
+/**
+ * Watch: follow a company for new developments on every hypothesis (Exa Monitor). Starts its
+ * monitor the first time, then records what the change feed has found. Safe to repeat: known URLs are skipped.
+ */
+export async function runWatch(db: Database, company: Company) {
+  if (!company.monitorId) {
+    setMonitorId(db, company.id, await createMonitor(company));
+    company = getCompany(db, company.id)!;
+  }
+  return (await monitorEvidence(company)).flatMap((c) => recordEvidence(db, company.id, c.hypothesisId, c.evidence, "monitor", c.at));
 }

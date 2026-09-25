@@ -1,4 +1,4 @@
-import type { Company, Evidence, EvidenceType, HypothesisStatus, HypothesisVersion } from "./types";
+import type { Company, Direction, Evidence, HypothesisVersion } from "./types";
 import { knownAt } from "./thesis";
 
 // Everything here works in UTC day strings ("YYYY-MM-DD"), like thesisAsOf: `Date.parse` of such a
@@ -49,24 +49,13 @@ export function assessmentDays(companies: Company[], today: string): string[] {
   return [...new Set(days)].filter((d) => d < today).sort();
 }
 
-export type Lens = { key: string; statement: string };
-
-/** The shared hypotheses, in the order they first appear; the first company's statement stands for the lens. */
-export function lensesOf(companies: Company[]): Lens[] {
-  const seen = new Map<string, Lens>();
-  for (const c of companies) {
-    for (const h of c.hypotheses) if (!seen.has(h.lens)) seen.set(h.lens, { key: h.lens, statement: h.statement });
-  }
-  return [...seen.values()];
-}
-
 export type Segment = {
   /** The assessment that opens this segment. */
   asOf: string;
   from: string;
   to: string;
+  verdict: Direction;
   confidence: number;
-  status: HypothesisStatus;
 };
 
 /** Confidence holds from each assessment until the next one, and the last holds to the end of the domain. */
@@ -75,12 +64,12 @@ export function stepSegments(history: HypothesisVersion[], [, end]: Domain): Seg
     asOf: v.asOf,
     from: day(v.asOf),
     to: day(history[i + 1]?.asOf ?? end),
+    verdict: v.verdict,
     confidence: v.confidence,
-    status: v.status,
   }));
 }
 
-export type Tick = { id: string; at: string; type?: EvidenceType };
+export type Tick = { id: string; at: string; type?: Direction };
 
 /** Evidence positioned by when it became knowable; anything before the domain collapses into `earlier`. */
 export function evidenceTicks(evidence: Evidence[], [start]: Domain): { ticks: Tick[]; earlier: Evidence[] } {
@@ -92,4 +81,25 @@ export function evidenceTicks(evidence: Evidence[], [start]: Domain): { ticks: T
     else ticks.push({ id: e.id, at, type: e.type });
   }
   return { ticks, earlier };
+}
+
+export type Bin = { from: string; to: string; x: number; supports: number; contradicts: number; neutral: number; unclassified: number };
+
+/**
+ * Ticks grouped into `binPx`-wide pixel buckets so dense evidence reads as bars, not overlapping hairlines.
+ * `x` is the bucket's left edge; only non-empty buckets are returned, left to right.
+ */
+export function binTicks(ticks: Tick[], domain: Domain, width: number, binPx: number): Bin[] {
+  const s = scale(domain, width);
+  const bins = new Map<number, Bin>();
+  for (const t of ticks) {
+    const i = Math.min(Math.floor(s.x(t.at) / binPx), Math.ceil(width / binPx) - 1);
+    let bin = bins.get(i);
+    if (!bin) {
+      bin = { from: s.day(i * binPx), to: s.day((i + 1) * binPx - 1), x: i * binPx, supports: 0, contradicts: 0, neutral: 0, unclassified: 0 };
+      bins.set(i, bin);
+    }
+    bin[t.type ?? "unclassified"]++;
+  }
+  return [...bins.values()].sort((a, b) => a.x - b.x);
 }

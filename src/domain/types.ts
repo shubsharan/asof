@@ -1,9 +1,12 @@
-export type HypothesisStatus = "supported" | "mixed" | "at-risk" | "contradicted";
-
-export type EvidenceType = "supports" | "contradicts" | "neutral";
+/**
+ * Which way something points relative to a hypothesis. One vocabulary for both levels: a piece of
+ * evidence supports, contradicts or is neutral, and so is an assessment's verdict on the body of evidence.
+ */
+export type Direction = "supports" | "neutral" | "contradicts";
 
 export type Evidence = {
   id: string;
+  companyId: string;
   hypothesisId: string;
   title: string;
   claim: string;
@@ -12,35 +15,38 @@ export type Evidence = {
   publishedAt?: string;
   /** When AsOf first saw it. */
   discoveredAt: string;
-  /** Absent until someone (Search, Agent, triage) has judged its direction. */
-  type?: EvidenceType;
+  /** Absent until someone (Research, Assess) has judged its direction. */
+  type?: Direction;
+  /** Which Exa tool found it: provenance, not the job that ran. */
   source: "search" | "agent" | "monitor";
   /** Why the source was judged credible, when the screening step recorded it. */
   sourceReasoning?: string;
 };
 
 /**
- * One append-only assessment of a hypothesis; the latest is its current state.
- * Always cites at least one piece of evidence. How confidence is judged is up to the assessor.
+ * One append-only assessment of a company on a hypothesis; the latest is its current state.
+ * Always cites at least one piece of evidence.
  */
 export type HypothesisVersion = {
   asOf: string;
+  /** Which way the credible evidence points, on balance. */
+  verdict: Direction;
+  /** How confident the assessor is in that verdict, 0–100. Not the probability the hypothesis is true. */
   confidence: number;
-  status: HypothesisStatus;
   reasoning: string;
   evidenceIds: string[];
   /** What would most change the assessment. */
   openQuestions: string[];
 };
 
-export type Hypothesis = {
-  id: string;
-  /** Which shared lens this is (e.g. "moat"): every company carries the same set, so the matrix can line them up. */
-  lens: string;
-  statement: string;
-  /** From the latest version. Absent until the hypothesis has been assessed against evidence. */
+/** A hypothesis the whole portfolio is tracked on, e.g. "moat". */
+export type PortfolioHypothesis = { id: string; name: string; statement: string };
+
+/** One company's standing on a portfolio hypothesis. */
+export type Hypothesis = PortfolioHypothesis & {
+  /** From the latest version; absent and "untested" until the company has been assessed on it. */
+  verdict: Direction | "untested";
   confidence?: number;
-  status: HypothesisStatus | "untested";
   evidence: Evidence[];
   history: HypothesisVersion[];
 };
@@ -52,21 +58,27 @@ export type Company = {
   domain: string;
   /** Exa Agent Monitor tracking this company, once created. */
   monitorId?: string;
+  /** Every portfolio hypothesis, in portfolio order. */
   hypotheses: Hypothesis[];
 };
 
-export type RunKind = "search" | "agent" | "monitor";
+/**
+ * The job a research run does. Research finds and tags evidence for one hypothesis (Exa Search);
+ * Assess gives a verdict and confidence on one hypothesis (Exa Agent); Watch follows a whole
+ * company for new developments (Exa Monitor).
+ */
+export type Job = "research" | "assess" | "watch";
 export type RunStatus = "queued" | "running" | "done" | "failed";
 export type RunTrigger = "manual" | "schedule";
 
-/** What a research run is aimed at: a hypothesis for search and agent, a whole company for monitor. */
-export type RunTarget = { kind: RunKind; companyId: string; hypothesisId?: string };
+/** What a run is aimed at: a company's hypothesis for research and assess, the whole company for watch. */
+export type RunTarget = { job: Job; companyId: string; hypothesisId?: string };
 
-type Assessed = Pick<Hypothesis, "confidence" | "status">;
+type Assessed = Pick<Hypothesis, "verdict" | "confidence">;
 
 export type RunResult = {
   evidenceAdded: number;
-  /** Set by agent runs, which reassess the hypothesis. */
+  /** Set by assess runs. */
   assessment?: { before: Assessed; after: Assessed };
 };
 
@@ -90,11 +102,11 @@ export type Schedule = RunTarget & {
   createdAt: string;
 };
 
-type UpdateSubject = { at: string; company: { id: string; name: string } };
-type UpdateHypothesis = { id: string; statement: string };
-
-/** One entry in the Updates feed, newest first. */
-export type Update =
-  | (UpdateSubject & { kind: "assessment"; hypothesis: UpdateHypothesis; before: Assessed; after: Assessed })
-  | (UpdateSubject & { kind: "evidence"; hypothesis: UpdateHypothesis; evidence: Evidence[] })
-  | (UpdateSubject & { kind: "run-failed"; hypothesis?: UpdateHypothesis; run: Run });
+/** One row in the Updates table: a single piece of evidence, with the company and hypothesis it bears on. */
+export type Update = {
+  /** When it became knowable (`knownAt`). */
+  at: string;
+  company: { id: string; name: string };
+  hypothesis: PortfolioHypothesis;
+  evidence: Evidence;
+};

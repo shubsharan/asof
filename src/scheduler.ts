@@ -9,7 +9,7 @@ import type { Runner } from "./runner";
 export function tick(db: Database, runner: Pick<Runner, "enqueue">, now = new Date().toISOString()) {
   const due = dueSchedules(db, now);
   for (const s of due) {
-    runner.enqueue({ kind: s.kind, companyId: s.companyId, hypothesisId: s.hypothesisId, trigger: "schedule", scheduleId: s.id });
+    runner.enqueue({ job: s.job, companyId: s.companyId, hypothesisId: s.hypothesisId, trigger: "schedule", scheduleId: s.id });
     advanceSchedule(db, s, now);
   }
   return due;

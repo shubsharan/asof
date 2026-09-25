@@ -1,55 +1,54 @@
 import { useMemo } from "react";
-import { lensesOf, timeDomain } from "@/domain/timeline";
+import { timeDomain } from "@/domain/timeline";
 import { useAsOf } from "./asof";
-import { hypothesisPath, lensPath } from "./routes";
+import { companyHypothesisPath, hypothesisPath } from "./routes";
 import { withAsOf } from "./shared";
 import { StripRow } from "./StripRow";
 import { usePortfolio } from "./usePortfolio";
 
 /**
- * One column of the matrix, expanded: a lens across every company on the shared time axis.
- * Without a lens, every lens in turn. Companies never assessed on a lens are listed, not drawn.
+ * One portfolio hypothesis across every company on the shared time axis. Without one, every
+ * hypothesis in turn. Companies never assessed on it are listed, not drawn.
  */
-export function Hypotheses({ lens }: { lens?: string }) {
-  const { companies, companiesAsOf, loaded } = usePortfolio();
+export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
+  const { hypotheses, companies, companiesAsOf, loaded } = usePortfolio();
   const { asOf, today } = useAsOf();
-  const lenses = useMemo(() => lensesOf(companies), [companies]);
   const domain = useMemo(() => timeDomain(companies, today), [companies, today]);
   if (!loaded) return null;
 
-  const shown = lens ? lenses.filter((l) => l.key === lens) : lenses;
-  if (lens && !shown.length) return <p>Not found.</p>;
+  const shown = hypothesisId ? hypotheses.filter((ph) => ph.id === hypothesisId) : hypotheses;
+  if (hypothesisId && !shown.length) return <p>Not found.</p>;
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">{lens ? shown[0]!.statement : "Hypotheses"}</h1>
+      <h1 className="text-2xl font-semibold">{hypothesisId ? shown[0]!.statement : "Hypotheses"}</h1>
       <p className="text-muted-foreground">
-        {lens ? "This hypothesis across the portfolio." : "Each hypothesis across the portfolio, on one time axis."}
+        {hypothesisId ? "This hypothesis across the portfolio." : "Each hypothesis across the portfolio, on one time axis."}
       </p>
 
-      {shown.map((l) => {
+      {shown.map((ph) => {
         const rows = companiesAsOf.flatMap((view, i) => {
-          const h = view.hypotheses.find((x) => x.lens === l.key);
-          const full = companies[i]!.hypotheses.find((x) => x.lens === l.key);
+          const h = view.hypotheses.find((x) => x.id === ph.id);
+          const full = companies[i]!.hypotheses.find((x) => x.id === ph.id);
           return h && full ? [{ company: view, h, full }] : [];
         });
         const drawn = rows.filter((r) => r.full.history.length > 0);
         const untested = rows.filter((r) => r.full.history.length === 0);
 
         return (
-          <section key={l.key} className="mt-10">
-            {!lens && (
+          <section key={ph.id} className="mt-10">
+            {!hypothesisId && (
               <h2 className="mb-2 font-medium">
-                <a href={withAsOf(lensPath(l.key), asOf)} className="hover:underline">
-                  {l.statement}
+                <a href={withAsOf(hypothesisPath(ph.id), asOf)} className="hover:underline">
+                  {ph.statement}
                 </a>
               </h2>
             )}
             {drawn.map(({ company, h, full }) => (
               <StripRow
-                key={h.id}
+                key={company.id}
                 title={company.name}
-                href={hypothesisPath(company.id, h.id)}
+                href={companyHypothesisPath(company.id, h.id)}
                 hypothesis={h}
                 full={full}
                 domain={domain}
@@ -61,9 +60,9 @@ export function Hypotheses({ lens }: { lens?: string }) {
               <p className="border-t py-4 text-sm text-muted-foreground">
                 Not assessed yet:{" "}
                 {untested.map(({ company, h }, i) => (
-                  <span key={h.id}>
+                  <span key={company.id}>
                     {i > 0 && ", "}
-                    <a href={withAsOf(hypothesisPath(company.id, h.id), asOf)} className="underline-offset-2 hover:underline">
+                    <a href={withAsOf(companyHypothesisPath(company.id, h.id), asOf)} className="underline-offset-2 hover:underline">
                       {company.name}
                     </a>
                   </span>

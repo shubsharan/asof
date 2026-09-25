@@ -17,7 +17,7 @@ export function thesisAsOf(company: Company, date: string): Company {
     return {
       ...h,
       confidence: latest?.confidence,
-      status: latest?.status ?? "untested",
+      verdict: latest?.verdict ?? "untested",
       history,
       evidence: h.evidence.filter((e) => day(knownAt(e)) <= day(date)),
     };
@@ -28,8 +28,8 @@ export function thesisAsOf(company: Company, date: string): Company {
 export type HypothesisChange = {
   id: string;
   statement: string;
-  before: Pick<Hypothesis, "confidence" | "status">;
-  after: Pick<Hypothesis, "confidence" | "status">;
+  before: Pick<Hypothesis, "verdict" | "confidence">;
+  after: Pick<Hypothesis, "verdict" | "confidence">;
   newEvidence: Evidence[];
 };
 
@@ -41,8 +41,8 @@ export function compareThesis(before: Company, after: Company): HypothesisChange
     return {
       id: h.id,
       statement: h.statement,
-      before: { confidence: prev?.confidence, status: prev?.status ?? "untested" },
-      after: { confidence: h.confidence, status: h.status },
+      before: { verdict: prev?.verdict ?? "untested", confidence: prev?.confidence },
+      after: { verdict: h.verdict, confidence: h.confidence },
       newEvidence: h.evidence.filter((e) => !seen.has(e.id)),
     };
   });

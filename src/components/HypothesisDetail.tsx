@@ -1,30 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastMove } from "@/domain/changes";
 import { timeDomain } from "@/domain/timeline";
-import type { Evidence, Run, RunKind } from "@/domain/types";
+import type { Evidence, Job, Run } from "@/domain/types";
 import { Button } from "@/components/ui/button";
 import { useAsOf } from "./asof";
+import { HypothesisCompare } from "./Compare";
 import { ConfidenceStrip } from "./ConfidenceStrip";
 import { usePortfolio } from "./usePortfolio";
 import { companyPath } from "./routes";
 import { SnapshotDialog } from "./SnapshotDialog";
 import {
   api,
+  DeltaChip,
+  DIRECTION,
   EvidenceRow,
-  formatConfidence,
   formatDate,
   formatDateTime,
   notifyRunsChanged,
   openResearch,
-  RUN_KIND_LABELS,
-  StatusBadge,
+  Prose,
+  JOB_LABELS,
   useApi,
   useCompany,
   usePolling,
   useRunsChanged,
+  VerdictBadge,
   withAsOf,
 } from "./shared";
 
-/** One cell of the matrix: the strip at full size, and the assessment the cursor is on. */
+/** Below this many characters the reasoning is shown whole; above it, the first paragraph with a "Read more". */
+const FOLD_CHARS = 700;
+
+/**
+ * One cell of the matrix: the strip at full size, and the assessment the cursor is on. The reading
+ * leads with what the assessment cited (so the reader sees what moved it before the prose), and
+ * when rewound a table compares that day with today.
+ */
 export function HypothesisDetail({ companyId, hypothesisId }: { companyId: string; hypothesisId: string }) {
   const { company, today: full, reload } = useCompany(companyId);
   const { companies } = usePortfolio();
@@ -33,7 +44,7 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
   const [error, setError] = useState<string>();
 
   // Research runs in the background; follow the latest one for this hypothesis and reload when it ends.
-  const { data: runs, reload: reloadRuns } = useApi<Run[]>(asOf ? undefined : `/api/runs?hypothesisId=${hypothesisId}`);
+  const { data: runs, reload: reloadRuns } = useApi<Run[]>(asOf ? undefined : `/api/runs?companyId=${companyId}&hypothesisId=${hypothesisId}`);
   const lastRun = runs?.[0];
   const running = lastRun?.status === "queued" || lastRun?.status === "running";
   usePolling(reloadRuns, 3000, running);
@@ -48,17 +59,18 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
   const fullH = full?.hypotheses.find((x) => x.id === hypothesisId);
   if (!company || !h || !fullH) return null;
   const latest = h.history.at(-1);
-  const previous = h.history.at(-2);
+  const move = lastMove(h);
   const cited = new Set(latest?.evidenceIds);
+  const citedEvidence = h.evidence.filter((e) => cited.has(e.id));
   const evidenceAfter = fullH.evidence.length - h.evidence.length;
   const assessmentsAfter = fullH.history.length - h.history.length;
   // Page snapshots only make sense for a past date.
   const snapshot = (e: Evidence) => asOf && <SnapshotDialog url={e.url} asOf={asOf} />;
 
-  const start = async (kind: RunKind) => {
+  const start = async (job: Job) => {
     setError(undefined);
     try {
-      await api("/api/runs", { kind, companyId, hypothesisId });
+      await api("/api/runs", { job, companyId, hypothesisId });
       notifyRunsChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -75,24 +87,28 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
       <h1 className="text-2xl font-semibold">{h.statement}</h1>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="font-mono text-3xl font-semibold tabular-nums">
-          {previous && <span className="text-muted-foreground">{previous.confidence}% → </span>}
-          {h.confidence === undefined ? "Untested" : `${h.confidence}%`}
-        </span>
-        <StatusBadge status={h.status} />
-        {latest && <span className="font-mono text-xs text-muted-foreground">assessed {formatDate(latest.asOf)}</span>}
-        {asOf && (fullH.confidence !== h.confidence || fullH.status !== h.status) && (
-          <span className="font-mono text-xs text-muted-foreground">
-            · today {formatConfidence(fullH.confidence)} {fullH.status}
+        {h.verdict === "untested" ? (
+          <span className="font-mono text-3xl font-semibold">Untested</span>
+        ) : (
+          <>
+            <VerdictBadge verdict={h.verdict} />
+            <span className="font-mono text-3xl font-semibold tabular-nums">{h.confidence}%</span>
+            <span className="text-sm text-muted-foreground">confident</span>
+          </>
+        )}
+        {move?.from && (
+          <span className="font-mono text-sm text-muted-foreground tabular-nums">
+            from {move.from.verdict} {move.from.confidence}% <DeltaChip move={move} className="text-sm" />
           </span>
         )}
+        {latest && <span className="font-mono text-xs text-muted-foreground">assessed {formatDate(latest.asOf)}</span>}
         {!asOf && (
           <div className="ml-auto flex gap-2">
-            <Button variant="outline" onClick={() => start("search")} disabled={running}>
-              Search now
+            <Button variant="outline" onClick={() => start("research")} disabled={running} title="Find and tag new evidence (Exa Search)">
+              Research
             </Button>
-            <Button onClick={() => start("agent")} disabled={running}>
-              Run deeper diligence
+            <Button onClick={() => start("assess")} disabled={running} title="Give a verdict and confidence (Exa Agent)">
+              Assess
             </Button>
           </div>
         )}
@@ -102,14 +118,23 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
 
       <div className="mt-6">
         <ConfidenceStrip hypothesis={fullH} domain={domain} asOf={asOf} today={today} size="full" onPickDate={setAsOf} />
-        <p className="mt-1 text-xs text-muted-foreground">Click an assessment to move the cursor there.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Click an assessment to move the cursor there.{!asOf && " Rewind to see any cited page as it read on that day."}
+        </p>
       </div>
+
+      {asOf && (
+        <div className="mt-8">
+          <HypothesisCompare view={h} full={fullH} asOf={asOf} />
+        </div>
+      )}
 
       {latest ? (
         <div className="mt-8 grid gap-6 md:grid-cols-[3fr_2fr]">
           <section>
             <h2 className="mb-2 font-medium">Why, as of {formatDate(latest.asOf)}</h2>
-            <p className="text-sm leading-relaxed whitespace-pre-line">{latest.reasoning.replaceAll("**", "") /* the Agent sometimes writes Markdown bold */}</p>
+            <CitedSummary evidence={citedEvidence} />
+            <Reasoning text={latest.reasoning} />
           </section>
           <section>
             <h2 className="mb-2 font-medium">Remaining concerns</h2>
@@ -127,16 +152,57 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
         </div>
       ) : (
         <p className="mt-8 text-sm text-muted-foreground">
-          {asOf ? `Not yet assessed by ${formatDate(asOf)}.` : "Not assessed yet. Run deeper diligence to get a first read."}
+          {asOf ? `Not yet assessed by ${formatDate(asOf)}.` : "Not assessed yet. Assess it to get a first read."}
         </p>
       )}
 
-      <EvidenceSection title="Cited in this assessment" evidence={h.evidence.filter((e) => cited.has(e.id))} action={snapshot} />
+      <EvidenceSection title="Cited in this assessment" evidence={citedEvidence} action={snapshot} />
       <EvidenceSection title={asOf ? `Other evidence known by ${formatDate(asOf)}` : "Other evidence"} evidence={h.evidence.filter((e) => !cited.has(e.id))} action={snapshot} />
       {asOf && evidenceAfter > 0 && (
         <p className="mt-6 text-sm text-muted-foreground">
           +{evidenceAfter} more {evidenceAfter === 1 ? "item" : "items"} became knowable after this date.
         </p>
+      )}
+    </>
+  );
+}
+
+/** What the assessment rested on, by direction, before the reader gets to the prose. */
+function CitedSummary({ evidence }: { evidence: Evidence[] }) {
+  const n = (type?: string) => evidence.filter((e) => (e.type ?? "unclassified") === type).length;
+  const parts: [label: string, count: number, tone: string][] = [
+    ["supporting", n("supports"), DIRECTION.supports.text],
+    ["contradicting", n("contradicts"), DIRECTION.contradicts.text],
+    ["neutral", n("neutral"), DIRECTION.neutral.text],
+    ["unclassified", n("unclassified"), DIRECTION.unclassified.text],
+  ];
+  return (
+    <p className="mb-3 flex flex-wrap gap-x-3 font-mono text-xs tabular-nums">
+      <span className="text-muted-foreground">Cited</span>
+      {parts
+        .filter(([, count]) => count)
+        .map(([label, count, tone]) => (
+          <span key={label} className={tone}>
+            {count} {label}
+          </span>
+        ))}
+    </p>
+  );
+}
+
+/** Long Agent reasoning folds to its first paragraph until asked for. */
+function Reasoning({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const paragraphs = text.split(/\n\s*\n/);
+  const foldable = text.length > FOLD_CHARS && paragraphs.length > 1;
+  const shown = foldable && !open ? paragraphs[0]! : text;
+  return (
+    <>
+      <Prose text={shown} className="text-sm leading-relaxed" />
+      {foldable && (
+        <button type="button" onClick={() => setOpen(!open)} className="mt-2 text-xs text-muted-foreground underline underline-offset-2">
+          {open ? "Show less" : `Read the full reasoning (${paragraphs.length - 1} more ${paragraphs.length === 2 ? "paragraph" : "paragraphs"})`}
+        </button>
       )}
     </>
   );
@@ -159,30 +225,30 @@ function EvidenceSection({ title, evidence, action }: { title: string; evidence:
 }
 
 function LastRun({ run }: { run: Run }) {
-  const kind = RUN_KIND_LABELS[run.kind];
+  const job = JOB_LABELS[run.job];
   const research = (
     <button type="button" onClick={() => openResearch()} className="underline">
-      Research
+      Runs
     </button>
   );
   if (run.status === "queued" || run.status === "running") {
     return (
       <p className="mt-2 text-sm text-muted-foreground">
-        {kind} run {run.status === "queued" ? "queued" : `running since ${formatDateTime(run.startedAt!)}`}
-        {run.kind === "agent" && " (takes a few minutes)"}. You can leave this page; follow it in {research}.
+        {job} run {run.status === "queued" ? "queued" : `running since ${formatDateTime(run.startedAt!)}`}
+        {run.job === "assess" && " (takes a few minutes)"}. You can leave this page; follow it in {research}.
       </p>
     );
   }
   if (run.status === "failed") {
     return (
       <p className="mt-2 text-sm text-destructive">
-        Last {kind.toLowerCase()} run failed: {run.error}
+        Last {job.toLowerCase()} run failed: {run.error}
       </p>
     );
   }
   return (
     <p className="mt-2 text-sm text-muted-foreground">
-      Last {kind.toLowerCase()} run {formatDateTime(run.finishedAt!)}: +{run.result?.evidenceAdded ?? 0} evidence. History in {research}.
+      Last {job.toLowerCase()} run {formatDateTime(run.finishedAt!)}: +{run.result?.evidenceAdded ?? 0} evidence. History in {research}.
     </p>
   );
 }

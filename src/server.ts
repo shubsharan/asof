@@ -1,6 +1,6 @@
 import index from "./index.html";
 import { createDb } from "./db/schema";
-import { listCompanies } from "./db/queries";
+import { listCompanies, listHypotheses } from "./db/queries";
 import { createSchedule, deleteSchedule, listRuns, listSchedules, recoverRuns, updateSchedule } from "./db/runs";
 import type { RunTarget } from "./domain/types";
 import { pageThenAndNow } from "./exa/snapshot";
@@ -34,6 +34,7 @@ const server = Bun.serve({
     "/*": index, // React app; the /api routes below take precedence
     // The whole portfolio with full history and evidence; the client rewinds it with thesisAsOf.
     "/api/companies": { GET: (req) => Response.json(listCompanies(db, asOfParam(req))) },
+    "/api/hypotheses": { GET: () => Response.json(listHypotheses(db)) },
 
     // Research runs. Starting one returns immediately; the runner works through the queue.
     "/api/runs": {

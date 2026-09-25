@@ -2,29 +2,25 @@ import type { Database } from "bun:sqlite";
 import { getCompany } from "./db/queries";
 import { activeRun, createRun, failRun, finishRun, getRun, startRun } from "./db/runs";
 import type { Hypothesis, Run, RunResult, RunTarget, RunTrigger } from "./domain/types";
-import { loadHypothesis, pullMonitor, runAgent, runSearch, startMonitor } from "./research";
+import { loadHypothesis, runAssess, runResearch, runWatch } from "./research";
 
 export type Executor = (db: Database, run: Run) => Promise<RunResult>;
 
-const assessed = (h: Hypothesis) => ({ confidence: h.confidence, status: h.status });
+const assessed = (h: Hypothesis) => ({ verdict: h.verdict, confidence: h.confidence });
 
-/** Does the research a run describes, through the same functions the backfill script uses. */
+/** Does the job a run describes, through the same functions the backfill script uses. */
 export const executeRun: Executor = async (db, run) => {
-  if (run.kind === "monitor") {
-    let company = getCompany(db, run.companyId);
+  if (run.job === "watch") {
+    const company = getCompany(db, run.companyId);
     if (!company) throw new Error(`Unknown company ${run.companyId}`);
-    if (!company.monitorId) {
-      await startMonitor(db, company);
-      company = getCompany(db, run.companyId)!;
-    }
-    return { evidenceAdded: (await pullMonitor(db, company)).length };
+    return { evidenceAdded: (await runWatch(db, company)).length };
   }
 
   const t = loadHypothesis(db, run.companyId, run.hypothesisId!);
   if (!t) throw new Error(`Unknown hypothesis ${run.hypothesisId}`);
-  if (run.kind === "search") return { evidenceAdded: (await runSearch(db, t.company, t.hypothesis)).length };
+  if (run.job === "research") return { evidenceAdded: (await runResearch(db, t.company, t.hypothesis)).length };
 
-  const after = await runAgent(db, t.company, t.hypothesis);
+  const after = await runAssess(db, t.company, t.hypothesis);
   return {
     evidenceAdded: after.evidence.length - t.hypothesis.evidence.length,
     assessment: { before: assessed(t.hypothesis), after: assessed(after) },

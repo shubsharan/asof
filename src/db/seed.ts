@@ -11,26 +11,22 @@ const COMPANIES = [
   { id: "tavily", domain: "tavily.com", name: "Tavily", description: "Search API built for AI agents and LLM applications." },
 ];
 
-// Every target starts from the same four hypotheses.
+// The portfolio's hypotheses; every company is tracked on all of them.
 const HYPOTHESES = [
-  { key: "adoption", statement: "Developer and enterprise adoption is accelerating" },
-  { key: "differentiation", statement: "Product differentiation is defensible" },
-  { key: "management", statement: "Management team can scale the company" },
-  { key: "moat", statement: "Competitive moat is strengthening" },
+  { id: "adoption", name: "Adoption", statement: "Developer and enterprise adoption is accelerating" },
+  { id: "differentiation", name: "Differentiation", statement: "Product differentiation is defensible" },
+  { id: "management", name: "Management", statement: "Management team can scale the company" },
+  { id: "moat", name: "Moat", statement: "Competitive moat is strengthening" },
 ];
 
 for (const suffix of ["", "-wal", "-shm"]) await Bun.file(DB_PATH + suffix).delete().catch(() => {});
 
 const db = createDb(DB_PATH);
 db.transaction(() => {
+  for (const h of HYPOTHESES) createHypothesis(db, h);
   const insertCompany = db.query("INSERT INTO companies (id, name, description, domain) VALUES (?, ?, ?, ?)");
-  for (const c of COMPANIES) {
-    insertCompany.run(c.id, c.name, c.description, c.domain);
-    for (const h of HYPOTHESES) {
-      createHypothesis(db, { id: `${c.id}-${h.key}`, companyId: c.id, lens: h.key, statement: h.statement });
-    }
-  }
+  for (const c of COMPANIES) insertCompany.run(c.id, c.name, c.description, c.domain);
 })();
 db.close();
 
-console.log(`Seeded ${DB_PATH}: ${COMPANIES.map((c) => c.name).join(", ")}, ${HYPOTHESES.length} untested hypotheses each.`);
+console.log(`Seeded ${DB_PATH}: ${COMPANIES.map((c) => c.name).join(", ")}, untested on ${HYPOTHESES.length} hypotheses.`);

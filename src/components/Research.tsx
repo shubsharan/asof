@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
-import type { Company, Run, RunKind, RunTarget, Schedule } from "@/domain/types";
+import type { Company, Job, Run, RunTarget, Schedule } from "@/domain/types";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePortfolio } from "./usePortfolio";
-import { hypothesisPath, companyPath } from "./routes";
+import { companyHypothesisPath, companyPath } from "./routes";
 import {
   api,
   formatConfidence,
   formatDateTime,
   formatDuration,
+  JOB_LABELS,
   notifyRunsChanged,
-  RUN_KIND_LABELS,
   RunStatusBadge,
   useApi,
   usePolling,
@@ -24,10 +24,10 @@ import {
 
 /** Company and hypothesis names for labelling runs and schedules. */
 function useTargets() {
-  const { companies } = usePortfolio();
+  const { companies, hypotheses } = usePortfolio();
   const label = (t: RunTarget) => ({
     company: companies.find((c) => c.id === t.companyId)?.name ?? t.companyId,
-    hypothesis: t.hypothesisId && (companies.flatMap((c) => c.hypotheses).find((h) => h.id === t.hypothesisId)?.statement ?? t.hypothesisId),
+    hypothesis: t.hypothesisId && (hypotheses.find((h) => h.id === t.hypothesisId)?.statement ?? t.hypothesisId),
   });
   return { companies, label };
 }
@@ -36,7 +36,7 @@ function TargetCell({ target, label }: { target: RunTarget; label: ReturnType<ty
   const { company, hypothesis } = label(target);
   return (
     <TableCell className="max-w-80">
-      <a href={target.hypothesisId ? hypothesisPath(target.companyId, target.hypothesisId) : companyPath(target.companyId)} className="block truncate hover:underline">
+      <a href={target.hypothesisId ? companyHypothesisPath(target.companyId, target.hypothesisId) : companyPath(target.companyId)} className="block truncate hover:underline">
         <span className="font-medium">{company}</span>
         {hypothesis && <span className="text-muted-foreground"> · {hypothesis}</span>}
       </a>
@@ -44,30 +44,29 @@ function TargetCell({ target, label }: { target: RunTarget; label: ReturnType<ty
   );
 }
 
-const KIND_HINTS: Record<RunKind, string> = {
-  search: "Exa Search for new evidence on the hypothesis. Takes seconds.",
-  agent: "Exa Agent gathers evidence and reassesses confidence. Takes a few minutes and uses Agent credits.",
-  monitor: "Pulls what the company's Exa monitor found, creating the monitor on the first run.",
+const JOB_HINTS: Record<Job, string> = {
+  research: "Finds and tags new evidence on the hypothesis with Exa Search. Takes seconds.",
+  assess: "Gives a verdict and how confident it is with Exa Agent, which may find more sources. Takes a few minutes and uses Agent credits.",
+  watch: "Collects what the company's Exa monitor has found on every hypothesis, starting the monitor on the first run.",
 };
 
-const blank = (companyId = ""): RunTarget => ({ kind: "search", companyId, hypothesisId: undefined });
-const isComplete = (t: RunTarget) => !!t.companyId && (t.kind === "monitor" || !!t.hypothesisId);
+const blank = (companyId = ""): RunTarget => ({ job: "research", companyId, hypothesisId: undefined });
+const isComplete = (t: RunTarget) => !!t.companyId && (t.job === "watch" || !!t.hypothesisId);
 
-/** Kind, company (unless fixed) and hypothesis (except for monitor pulls). */
+/** Job, company (unless fixed) and hypothesis (except for watch, which covers the whole company). */
 function TargetPicker({ value, onChange, company }: { value: RunTarget; onChange: (t: RunTarget) => void; company?: Company }) {
-  const { companies } = useTargets();
-  const hypotheses = company ? company.hypotheses : (companies.find((c) => c.id === value.companyId)?.hypotheses ?? []);
+  const { companies, hypotheses } = usePortfolio();
 
   return (
     <>
-      <Select value={value.kind} onValueChange={(kind: RunKind) => onChange({ ...value, kind, hypothesisId: kind === "monitor" ? undefined : value.hypothesisId })}>
+      <Select value={value.job} onValueChange={(job: Job) => onChange({ ...value, job, hypothesisId: job === "watch" ? undefined : value.hypothesisId })}>
         <SelectTrigger size="sm" className="w-36">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {(Object.keys(RUN_KIND_LABELS) as RunKind[]).map((k) => (
-            <SelectItem key={k} value={k}>
-              {RUN_KIND_LABELS[k]}
+          {(Object.keys(JOB_LABELS) as Job[]).map((j) => (
+            <SelectItem key={j} value={j}>
+              {JOB_LABELS[j]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -86,7 +85,7 @@ function TargetPicker({ value, onChange, company }: { value: RunTarget; onChange
           </SelectContent>
         </Select>
       )}
-      {value.kind !== "monitor" && (
+      {value.job !== "watch" && (
         <Select value={value.hypothesisId ?? ""} onValueChange={(hypothesisId) => onChange({ ...value, hypothesisId })} disabled={!value.companyId}>
           <SelectTrigger size="sm" className="w-72">
             <SelectValue placeholder="Hypothesis" />
@@ -129,7 +128,7 @@ export function RunNow({ company, initial }: { company?: Company; initial?: RunT
           Start run
         </Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{KIND_HINTS[target.kind]}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{JOB_HINTS[target.job]}</p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
     </section>
   );
@@ -149,7 +148,7 @@ function RunResultCell({ run }: { run: Run }) {
   return (
     <TableCell className="text-muted-foreground">
       {run.result && `+${run.result.evidenceAdded} evidence`}
-      {a && ` · ${formatConfidence(a.before.confidence)} → ${formatConfidence(a.after.confidence)}`}
+      {a && ` · ${a.before.verdict} ${formatConfidence(a.before.confidence)} → ${a.after.verdict} ${formatConfidence(a.after.confidence)}`}
     </TableCell>
   );
 }
@@ -183,7 +182,7 @@ export function RunsTable({ companyId }: { companyId?: string }) {
           <TableBody>
             {runs?.map((r) => (
               <TableRow key={r.id}>
-                <TableCell>{RUN_KIND_LABELS[r.kind]}</TableCell>
+                <TableCell>{JOB_LABELS[r.job]}</TableCell>
                 <TargetCell target={r} label={label} />
                 <TableCell className="text-muted-foreground">{r.trigger === "schedule" ? "Scheduled" : "Manual"}</TableCell>
                 <TableCell>
@@ -276,7 +275,7 @@ export function SchedulesTable({ company }: { company?: Company }) {
           <TableBody>
             {schedules?.map((s) => (
               <TableRow key={s.id} className={s.enabled ? undefined : "text-muted-foreground"}>
-                <TableCell>{RUN_KIND_LABELS[s.kind]}</TableCell>
+                <TableCell>{JOB_LABELS[s.job]}</TableCell>
                 <TargetCell target={s} label={label} />
                 <TableCell>
                   <IntervalSelect value={s.everyHours} onChange={(everyHours) => change(s, { everyHours })} />
@@ -303,7 +302,7 @@ export function SchedulesTable({ company }: { company?: Company }) {
           Add schedule
         </Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{KIND_HINTS[draft.kind]} The first run is one interval from now.</p>
+      <p className="mt-2 text-xs text-muted-foreground">{JOB_HINTS[draft.job]} The first run is one interval from now.</p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
     </section>
   );

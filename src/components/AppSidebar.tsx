@@ -1,6 +1,4 @@
-import { useMemo } from "react";
-import { FlaskConical, Inbox, LayoutGrid, Settings, Target } from "lucide-react";
-import { lensesOf } from "@/domain/timeline";
+import { FlaskConical, Inbox, LayoutGrid, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,17 +15,15 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { useAsOf } from "./asof";
-import { companyPath, lensPath, type Route } from "./routes";
+import { companyPath, type Route } from "./routes";
 import { openResearch, withAsOf } from "./shared";
 import { usePortfolio } from "./usePortfolio";
 
-/** Portfolio (with its companies), Hypotheses (with the lenses), Updates, Settings; Research opens as a panel. */
+/** Portfolio (with its companies), Updates, Settings; Runs opens as a panel. Hypotheses live on the Portfolio cards. */
 export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: number }) {
   const { companies } = usePortfolio();
   const { asOf } = useAsOf();
-  const lenses = useMemo(() => lensesOf(companies), [companies]);
   const companyId = "companyId" in route ? route.companyId : undefined;
-  const lens = route.page === "hypotheses" ? route.lens : undefined;
   const link = (path: string) => withAsOf(path, asOf);
 
   return (
@@ -49,7 +45,7 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Portfolio" isActive={route.page === "portfolio" || !!companyId}>
+              <SidebarMenuButton asChild tooltip="Portfolio" isActive={route.page === "portfolio" || route.page === "hypotheses" || !!companyId}>
                 <a href={link("/")}>
                   <LayoutGrid />
                   <span>Portfolio</span>
@@ -58,28 +54,8 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
               <SidebarMenuSub>
                 {companies.map((c) => (
                   <SidebarMenuSubItem key={c.id}>
-                    <SidebarMenuSubButton asChild isActive={c.id === companyId}>
+                    <SidebarMenuSubButton asChild isActive={c.id === companyId} className={c.hypotheses.some((h) => h.history.length) ? undefined : "text-muted-foreground"}>
                       <a href={link(companyPath(c.id))}>{c.name}</a>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                ))}
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Hypotheses" isActive={route.page === "hypotheses"}>
-                <a href={link("/hypotheses")}>
-                  <Target />
-                  <span>Hypotheses</span>
-                </a>
-              </SidebarMenuButton>
-              <SidebarMenuSub>
-                {lenses.map((l) => (
-                  <SidebarMenuSubItem key={l.key}>
-                    <SidebarMenuSubButton asChild isActive={l.key === lens}>
-                      <a href={link(lensPath(l.key))} title={l.statement}>
-                        <span className="truncate">{l.statement}</span>
-                      </a>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                 ))}
@@ -110,9 +86,9 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Research" onClick={() => openResearch()}>
+            <SidebarMenuButton tooltip="Runs" onClick={() => openResearch()}>
               <FlaskConical />
-              <span>Research</span>
+              <span>Runs</span>
             </SidebarMenuButton>
             {activeRuns > 0 && <SidebarMenuBadge className="bg-sky-100 font-mono text-sky-800">{activeRuns}</SidebarMenuBadge>}
           </SidebarMenuItem>

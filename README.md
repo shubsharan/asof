@@ -259,10 +259,10 @@ Timeline / Rewind
 The same `Bun.serve()` process, under `/api` so the routes don't collide with the front end:
 
 ```text
-POST /api/research/search
-POST /api/research/agent
-POST /api/monitor/create
-GET  /api/monitor/events
+GET  /api/companies        the whole portfolio, with history and evidence
+GET  /api/hypotheses       the portfolio's hypotheses
+GET  /api/runs             POST /api/runs { job, companyId, hypothesisId? }
+GET  /api/schedules        POST /api/schedules, PATCH/DELETE /api/schedules/:id
 POST /api/snapshot
 ```
 
@@ -300,38 +300,57 @@ Monitor can be configured for real ahead of time, or shown using results we coll
 
 ### Data model
 
+Hypotheses belong to the portfolio, and every company is tracked on every one. Evidence and assessments
+share one vocabulary: a piece of evidence supports, contradicts or is neutral to a hypothesis, and an
+assessment's verdict says which way the credible evidence points on balance, with how confident the
+assessor is in that verdict.
+
 ```ts
+type Direction = "supports" | "neutral" | "contradicts";
+
+type PortfolioHypothesis = { id: string; name: string; statement: string }; // e.g. "moat"
+
 type Company = {
   id: string;
   name: string;
   description: string;
-  hypotheses: Hypothesis[];
+  hypotheses: Hypothesis[]; // its standing on every portfolio hypothesis
 };
 
-type Hypothesis = {
-  id: string;
-  statement: string;
-  status: "supported" | "mixed" | "at-risk" | "contradicted";
-  confidence: number;
+type Hypothesis = PortfolioHypothesis & {
+  verdict: Direction | "untested";
+  confidence?: number; // in the verdict, 0–100
   evidence: Evidence[];
   history: HypothesisVersion[];
 };
 
 type HypothesisVersion = {
-  date: string;
+  asOf: string;
+  verdict: Direction;
   confidence: number;
-  status: string;
   reasoning: string;
+  evidenceIds: string[];
+  openQuestions: string[];
 };
 
 type Evidence = {
   id: string;
+  companyId: string;
+  hypothesisId: string;
   title: string;
   claim: string;
   url: string;
   publishedAt?: string;
   discoveredAt: string;
-  direction: "supports" | "contradicts" | "neutral";
-  source: "search" | "agent" | "monitor";
+  type?: Direction; // absent until judged
+  source: "search" | "agent" | "monitor"; // the Exa tool that found it
 };
 ```
+
+Research runs are grouped by the job they do, not the Exa tool behind them:
+
+| Job | Target | Exa tool | Writes |
+|---|---|---|---|
+| Research | a company's hypothesis | Search | tagged evidence |
+| Assess | a company's hypothesis | Agent | a verdict + confidence (and the sources it cites) |
+| Watch | a whole company | Monitor | untagged evidence on every hypothesis |

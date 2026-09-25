@@ -3,7 +3,7 @@ import type { Run, RunResult, RunTarget, RunTrigger, Schedule } from "../domain/
 
 type RunRow = {
   id: string;
-  kind: Run["kind"];
+  job: Run["job"];
   company_id: string;
   hypothesis_id: string | null;
   trigger: RunTrigger;
@@ -18,7 +18,7 @@ type RunRow = {
 
 type ScheduleRow = {
   id: string;
-  kind: Schedule["kind"];
+  job: Schedule["job"];
   company_id: string;
   hypothesis_id: string | null;
   every_hours: number;
@@ -29,7 +29,7 @@ type ScheduleRow = {
 
 const toRun = (r: RunRow): Run => ({
   id: r.id,
-  kind: r.kind,
+  job: r.job,
   companyId: r.company_id,
   hypothesisId: r.hypothesis_id ?? undefined,
   trigger: r.trigger,
@@ -44,7 +44,7 @@ const toRun = (r: RunRow): Run => ({
 
 const toSchedule = (r: ScheduleRow): Schedule => ({
   id: r.id,
-  kind: r.kind,
+  job: r.job,
   companyId: r.company_id,
   hypothesisId: r.hypothesis_id ?? undefined,
   everyHours: r.every_hours,
@@ -53,11 +53,11 @@ const toSchedule = (r: ScheduleRow): Schedule => ({
   createdAt: r.created_at,
 });
 
-/** Search and agent runs target a hypothesis; monitor runs target the whole company. */
+/** Research and assess target a company's hypothesis; watch targets the whole company. */
 export function checkTarget(t: RunTarget): void {
-  if (!["search", "agent", "monitor"].includes(t.kind)) throw new Error(`Unknown run kind ${t.kind}`);
-  if (t.kind === "monitor" ? t.hypothesisId : !t.hypothesisId) {
-    throw new Error(t.kind === "monitor" ? "Monitor runs target a company, not a hypothesis" : `A ${t.kind} run needs a hypothesis`);
+  if (!["research", "assess", "watch"].includes(t.job)) throw new Error(`Unknown job ${t.job}`);
+  if (t.job === "watch" ? t.hypothesisId : !t.hypothesisId) {
+    throw new Error(t.job === "watch" ? "Watch runs target a company, not a hypothesis" : `A ${t.job} run needs a hypothesis`);
   }
 }
 
@@ -74,12 +74,12 @@ export function createRun(
   checkTarget(target);
   const row = db
     .query<RunRow, Record<string, string | null>>(
-      `INSERT INTO runs (id, kind, company_id, hypothesis_id, trigger, schedule_id, status, created_at)
-       VALUES ($id, $kind, $companyId, $hypothesisId, $trigger, $scheduleId, 'queued', $now) RETURNING *`,
+      `INSERT INTO runs (id, job, company_id, hypothesis_id, trigger, schedule_id, status, created_at)
+       VALUES ($id, $job, $companyId, $hypothesisId, $trigger, $scheduleId, 'queued', $now) RETURNING *`,
     )
     .get({
       id: crypto.randomUUID(),
-      kind: target.kind,
+      job: target.job,
       companyId: target.companyId,
       hypothesisId: target.hypothesisId ?? null,
       trigger: target.trigger,
@@ -106,14 +106,14 @@ export function failRun(db: Database, id: string, error: string, now = new Date(
   db.query("UPDATE runs SET status = 'failed', finished_at = ?, error = ? WHERE id = ?").run(now, error, id);
 }
 
-/** A queued or running run for the same kind and target, if there is one. */
+/** A queued or running run for the same job and target, if there is one. */
 export function activeRun(db: Database, t: RunTarget): Run | undefined {
   const row = db
     .query<RunRow, [string, string, string | null]>(
       `SELECT * FROM runs WHERE status IN ('queued', 'running')
-       AND kind = ? AND company_id = ? AND hypothesis_id IS ? ORDER BY created_at LIMIT 1`,
+       AND job = ? AND company_id = ? AND hypothesis_id IS ? ORDER BY created_at LIMIT 1`,
     )
-    .get(t.kind, t.companyId, t.hypothesisId ?? null);
+    .get(t.job, t.companyId, t.hypothesisId ?? null);
   return row ? toRun(row) : undefined;
 }
 
@@ -159,12 +159,12 @@ export function createSchedule(
   if (!(s.everyHours > 0)) throw new Error("A schedule needs a positive interval");
   const row = db
     .query<ScheduleRow, Record<string, string | number | null>>(
-      `INSERT INTO schedules (id, kind, company_id, hypothesis_id, every_hours, enabled, next_run_at, created_at)
-       VALUES ($id, $kind, $companyId, $hypothesisId, $everyHours, 1, $next, $now) RETURNING *`,
+      `INSERT INTO schedules (id, job, company_id, hypothesis_id, every_hours, enabled, next_run_at, created_at)
+       VALUES ($id, $job, $companyId, $hypothesisId, $everyHours, 1, $next, $now) RETURNING *`,
     )
     .get({
       id: crypto.randomUUID(),
-      kind: s.kind,
+      job: s.job,
       companyId: s.companyId,
       hypothesisId: s.hypothesisId ?? null,
       everyHours: s.everyHours,

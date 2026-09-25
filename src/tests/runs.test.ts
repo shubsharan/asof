@@ -9,12 +9,12 @@ import { tick } from "../scheduler";
 function setup() {
   const db = createDb(":memory:");
   db.run("INSERT INTO companies (id, name, description, domain) VALUES ('acme', 'Acme Security', 'Security software', 'acme.example')");
-  createHypothesis(db, { id: "adoption", companyId: "acme", lens: "adoption", statement: "Enterprise adoption is accelerating" });
-  createHypothesis(db, { id: "moat", companyId: "acme", lens: "moat", statement: "Moat is strengthening" });
+  createHypothesis(db, { id: "adoption", name: "Adoption", statement: "Enterprise adoption is accelerating" });
+  createHypothesis(db, { id: "moat", name: "Moat", statement: "Moat is strengthening" });
   return db;
 }
 
-const search = (hypothesisId = "adoption") => ({ kind: "search" as const, companyId: "acme", hypothesisId, trigger: "manual" as const });
+const research = (hypothesisId = "adoption") => ({ job: "research" as const, companyId: "acme", hypothesisId, trigger: "manual" as const });
 
 /** An executor whose runs finish only when the test says so. */
 function controlled() {
@@ -28,7 +28,7 @@ test("a run moves from queued to running to done and records its result", async 
   const { execute, pending } = controlled();
   const runner = createRunner(db, execute);
 
-  const run = runner.enqueue(search());
+  const run = runner.enqueue(research());
   expect(run.status).toBe("running");
   pending[0]!.resolve({ evidenceAdded: 3 });
   await runner.idle();
@@ -45,8 +45,8 @@ test("a failing run records its error and the queue keeps going", async () => {
     return { evidenceAdded: 1 };
   }, 1);
 
-  const a = runner.enqueue(search("adoption"));
-  const b = runner.enqueue(search("moat"));
+  const a = runner.enqueue(research("adoption"));
+  const b = runner.enqueue(research("moat"));
   await runner.idle();
 
   expect(getRun(db, a.id)).toMatchObject({ status: "failed", error: "Exa is down" });
@@ -58,14 +58,14 @@ test("enqueueing the same target twice returns the run already in progress", asy
   const { execute, pending } = controlled();
   const runner = createRunner(db, execute);
 
-  const first = runner.enqueue(search());
-  const again = runner.enqueue({ ...search(), trigger: "schedule" });
+  const first = runner.enqueue(research());
+  const again = runner.enqueue({ ...research(), trigger: "schedule" });
   expect(again.id).toBe(first.id);
-  expect(runner.enqueue({ ...search(), kind: "agent" }).id).not.toBe(first.id);
+  expect(runner.enqueue({ ...research(), job: "assess" }).id).not.toBe(first.id);
 
   pending.forEach((p) => p.resolve({ evidenceAdded: 0 }));
   await runner.idle();
-  expect(runner.enqueue(search()).id).not.toBe(first.id); // finished runs don't block new ones
+  expect(runner.enqueue(research()).id).not.toBe(first.id); // finished runs don't block new ones
 });
 
 test("no more than `concurrency` runs execute at once", async () => {
@@ -74,9 +74,9 @@ test("no more than `concurrency` runs execute at once", async () => {
   const runner = createRunner(db, execute, 2);
 
   const runs = [
-    runner.enqueue(search("adoption")),
-    runner.enqueue({ ...search("adoption"), kind: "agent" }),
-    runner.enqueue(search("moat")),
+    runner.enqueue(research("adoption")),
+    runner.enqueue({ ...research("adoption"), job: "assess" }),
+    runner.enqueue(research("moat")),
   ];
   expect(pending).toHaveLength(2);
   expect(getRun(db, runs[2]!.id)!.status).toBe("queued");
@@ -89,18 +89,18 @@ test("no more than `concurrency` runs execute at once", async () => {
   expect(listRuns(db).every((r) => r.status === "done")).toBe(true);
 });
 
-test("runs target a hypothesis, except monitor runs which target the company", () => {
+test("runs target a company's hypothesis, except watch runs which target the whole company", () => {
   const db = setup();
-  expect(() => createRun(db, { kind: "search", companyId: "acme", trigger: "manual" })).toThrow(/needs a hypothesis/);
-  expect(() => createRun(db, { kind: "monitor", companyId: "acme", hypothesisId: "adoption", trigger: "manual" })).toThrow(/company/);
-  expect(createRun(db, { kind: "monitor", companyId: "acme", trigger: "manual" }).status).toBe("queued");
+  expect(() => createRun(db, { job: "research", companyId: "acme", trigger: "manual" })).toThrow(/needs a hypothesis/);
+  expect(() => createRun(db, { job: "watch", companyId: "acme", hypothesisId: "adoption", trigger: "manual" })).toThrow(/company/);
+  expect(createRun(db, { job: "watch", companyId: "acme", trigger: "manual" }).status).toBe("queued");
 });
 
 test("after a restart, interrupted runs fail and queued runs are picked up again", async () => {
   const db = setup();
-  const interrupted = createRun(db, search("adoption"));
+  const interrupted = createRun(db, research("adoption"));
   startRun(db, interrupted.id);
-  const waiting = createRun(db, search("moat"));
+  const waiting = createRun(db, research("moat"));
 
   const queued = recoverRuns(db);
   expect(queued.map((r) => r.id)).toEqual([waiting.id]);
@@ -114,8 +114,8 @@ test("after a restart, interrupted runs fail and queued runs are picked up again
 
 test("the scheduler queues due, enabled schedules once and advances them", async () => {
   const db = setup();
-  const daily = createSchedule(db, { kind: "search", companyId: "acme", hypothesisId: "adoption", everyHours: 24 }, "2026-09-01T00:00:00.000Z");
-  const paused = createSchedule(db, { kind: "monitor", companyId: "acme", everyHours: 1 }, "2026-09-01T00:00:00.000Z");
+  const daily = createSchedule(db, { job: "research", companyId: "acme", hypothesisId: "adoption", everyHours: 24 }, "2026-09-01T00:00:00.000Z");
+  const paused = createSchedule(db, { job: "watch", companyId: "acme", everyHours: 1 }, "2026-09-01T00:00:00.000Z");
   updateSchedule(db, paused.id, { enabled: false });
   const runner = createRunner(db, async () => ({ evidenceAdded: 0 }));
 
