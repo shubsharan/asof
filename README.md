@@ -67,7 +67,7 @@ Agent runs deeper diligence when a hypothesis needs a real evaluation.
 The app turns the result into a thesis update:
 
 ```ts
-type ThesisUpdate = {
+type HypothesisUpdate = {
   previousConfidence: number;
   currentConfidence: number;
   status: "supported" | "mixed" | "contradicted";
