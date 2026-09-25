@@ -41,11 +41,11 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 
 ## 5. Exa Snapshot
 - [x] `POST /api/snapshot {url, asOf}` → a page as it was on that date (Exa Snapshot) and as it is now. Snapshot isn't used in search: it doesn't work with deep search and drops publish dates; dated search uses `endPublishedDate`. ~5-month window, 100 trial requests
-- [ ] Compare "then vs today" in the UI: fetch the company at both dates, diff with `compareThesis`
+- [x] Compare "then vs today" in the UI: fetch the company at both dates, diff with `compareThesis`
 
 ## 6. UI
-- [ ] `src/index.html` + `src/main.tsx` (React via Bun HTML imports)
-- [ ] Portfolio → Target overview → Hypothesis detail → Rewind timeline
+- [x] `src/index.html` + `src/main.tsx` (React via Bun HTML imports) + Tailwind v4 (`bun-plugin-tailwind` in `bunfig.toml`) + shadcn (`components.json`, add components with `bunx --bun shadcn@latest add <name>`)
+- [x] Portfolio → Target overview → Hypothesis detail → Rewind timeline (`/`, `/c/:id`, `/c/:id/h/:hid`, `?asOf=`)
 
 ## Notes
 - All code and tests live under `src/` (tests in `src/tests/`, generated data in `data/`); nothing but config at the repo root.

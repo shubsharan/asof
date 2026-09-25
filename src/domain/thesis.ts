@@ -4,7 +4,7 @@ import type { Company, Evidence, Hypothesis } from "./types";
 const day = (iso: string) => iso.slice(0, 10);
 
 /** When the evidence became knowable: its publish date, or when we found it if undated. */
-const knownAt = (e: Evidence) => e.publishedAt ?? e.discoveredAt;
+export const knownAt = (e: Evidence) => e.publishedAt ?? e.discoveredAt;
 
 /**
  * The thesis as it looked on `date`: each hypothesis at its latest assessment on or before

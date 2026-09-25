@@ -1,3 +1,4 @@
+import index from "./index.html";
 import { createDb } from "./db/schema";
 import { getCompany, listPortfolio } from "./db/queries";
 import { pageThenAndNow } from "./exa/snapshot";
@@ -17,6 +18,7 @@ const server = Bun.serve({
   // Agent runs take minutes; don't drop the connection while waiting.
   idleTimeout: 0,
   routes: {
+    "/*": index, // React app; the /api routes below take precedence
     "/api/portfolio": { GET: () => Response.json(listPortfolio(db)) },
     "/api/companies/:id": {
       GET: (req) => {
@@ -58,6 +60,7 @@ const server = Bun.serve({
       },
     },
   },
+  development: { hmr: true, console: true },
 });
 
 console.log(`AsOf listening on ${server.url}`);
