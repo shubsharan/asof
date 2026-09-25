@@ -37,3 +37,6 @@ data/
 # VSCode
 .vscode
 .cursor
+
+# superpowers scratch (sdd ledgers, briefs)
+.superpowers
