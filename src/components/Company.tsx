@@ -6,7 +6,7 @@ import { useAsOf } from "./asof";
 import { CompanyCompare } from "./Compare";
 import { usePortfolio } from "./usePortfolio";
 import { companyHypothesisPath } from "./routes";
-import { openResearch, useCompany } from "./shared";
+import { CompanyAvatar, openResearch, useCompany } from "./shared";
 import { StripRow } from "./StripRow";
 
 /**
@@ -28,7 +28,10 @@ export function Company({ id }: { id: string }) {
     <>
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold">{view.name}</h1>
+          <h1 className="flex items-center gap-3 text-2xl font-semibold">
+            <CompanyAvatar company={view} className="size-8" />
+            {view.name}
+          </h1>
           <p className="text-muted-foreground">{view.description}</p>
           <p className="mt-2 text-sm">
             {assessed.length === 0 ? (

@@ -11,6 +11,7 @@ import { companyPath } from "./routes";
 import { SnapshotDialog } from "./SnapshotDialog";
 import {
   api,
+  CompanyAvatar,
   DeltaChip,
   DIRECTION,
   EvidenceRow,
@@ -80,7 +81,8 @@ export function HypothesisDetail({ companyId, hypothesisId }: { companyId: strin
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        <a href={withAsOf(companyPath(companyId), asOf)} className="hover:underline">
+        <a href={withAsOf(companyPath(companyId), asOf)} className="inline-flex items-center gap-2 hover:underline">
+          <CompanyAvatar company={company} className="size-5" />
           {company.name}
         </a>
       </p>

@@ -106,7 +106,7 @@ export type Schedule = RunTarget & {
 export type Update = {
   /** When it became knowable (`knownAt`). */
   at: string;
-  company: { id: string; name: string };
+  company: Pick<Company, "id" | "name" | "domain">;
   hypothesis: PortfolioHypothesis;
   evidence: Evidence;
 };

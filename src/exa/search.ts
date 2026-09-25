@@ -1,6 +1,6 @@
 import type { NewEvidence } from "../db/queries";
 import type { Company, Hypothesis } from "../domain/types";
-import { exa } from "./client";
+import { exa, withRateLimitRetry } from "./client";
 
 // Exa synthesizes this from the results. Per item it reasons about the source before judging direction.
 const OUTPUT_SCHEMA = {
@@ -50,13 +50,15 @@ export async function searchEvidence(company: Company, hypothesis: Hypothesis, a
   ];
   const responses = await Promise.all(
     queries.map((query) =>
-      exa.search(query, {
-        type: "auto",
-        systemPrompt: systemPrompt(subject, hypothesis.statement),
-        outputSchema: OUTPUT_SCHEMA,
-        contents: { highlights: true },
-        endPublishedDate: asOf,
-      }),
+      withRateLimitRetry(() =>
+        exa.search(query, {
+          type: "auto",
+          systemPrompt: systemPrompt(subject, hypothesis.statement),
+          outputSchema: OUTPUT_SCHEMA,
+          contents: { highlights: true },
+          endPublishedDate: asOf,
+        }),
+      ),
     ),
   );
 

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAsOf } from "./asof";
 import { companyPath, type Route } from "./routes";
-import { openResearch, withAsOf } from "./shared";
+import { CompanyAvatar, openResearch, withAsOf } from "./shared";
 import { usePortfolio } from "./usePortfolio";
 
 /** Portfolio (with its companies), Updates, Settings; Runs opens as a panel. Hypotheses live on the Portfolio cards. */
@@ -55,7 +55,10 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
                 {companies.map((c) => (
                   <SidebarMenuSubItem key={c.id}>
                     <SidebarMenuSubButton asChild isActive={c.id === companyId} className={c.hypotheses.some((h) => h.history.length) ? undefined : "text-muted-foreground"}>
-                      <a href={link(companyPath(c.id))}>{c.name}</a>
+                      <a href={link(companyPath(c.id))}>
+                        <CompanyAvatar company={c} className="size-4" />
+                        <span>{c.name}</span>
+                      </a>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                 ))}

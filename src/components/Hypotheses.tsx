@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { timeDomain } from "@/domain/timeline";
 import { useAsOf } from "./asof";
 import { companyHypothesisPath, hypothesisPath } from "./routes";
-import { withAsOf } from "./shared";
+import { CompanyAvatar, withAsOf } from "./shared";
 import { StripRow } from "./StripRow";
 import { usePortfolio } from "./usePortfolio";
 
@@ -48,6 +48,7 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
               <StripRow
                 key={company.id}
                 title={company.name}
+                avatar={<CompanyAvatar company={company} />}
                 href={companyHypothesisPath(company.id, h.id)}
                 hypothesis={h}
                 full={full}

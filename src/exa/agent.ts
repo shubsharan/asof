@@ -1,6 +1,6 @@
 import type { NewEvidence } from "../db/queries";
 import type { Company, Hypothesis, HypothesisVersion } from "../domain/types";
-import { exa } from "./client";
+import { exa, withRateLimitRetry } from "./client";
 
 const OUTPUT_SCHEMA = {
   type: "object",
@@ -43,7 +43,7 @@ export type Evaluation = Omit<HypothesisVersion, "asOf" | "evidenceIds"> & {
  */
 export async function evaluateHypothesis(company: Company, hypothesis: Hypothesis, asOf?: string): Promise<Evaluation> {
   const current = hypothesis.history.at(-1);
-  const run = await exa.agent.runs.createAndWait({
+  const { id } = await withRateLimitRetry(() => exa.agent.runs.create({
     effort: "auto",
     query: `Evaluate the investment hypothesis about ${company.name} (${company.description}): "${hypothesis.statement}".
 Current assessment: ${current ? `evidence ${current.verdict} the hypothesis (${current.confidence}% confident). ${current.reasoning}` : "untested, no prior assessment"}.
@@ -67,7 +67,23 @@ about later events. Every newEvidence item must have a publishedAt on or before 
     }`,
     input: { data: hypothesis.evidence },
     outputSchema: OUTPUT_SCHEMA,
-  }, { timeoutMs: 15 * 60_000 }); // runs take several minutes; the SDK default gives up at 2
+  }));
+  const run = await waitForRun(id);
   console.log(`Agent run ${run.id}: ${run.stopReason}, $${run.costDollars?.total}`);
   return run.output?.structured as Evaluation;
+}
+
+const POLL_MS = 10_000; // runs take minutes; the SDK's 1s polling would trip the rate limit across parallel runs
+const TIMEOUT_MS = 15 * 60_000;
+
+/** Polls an Agent run until it finishes, tolerating rate limits, and throws if it failed or was cancelled. */
+async function waitForRun(id: string) {
+  const started = Date.now();
+  for (;;) {
+    const run = await withRateLimitRetry(() => exa.agent.runs.get(id));
+    if (run.status === "completed") return run;
+    if (run.status === "failed" || run.status === "cancelled") throw new Error(`Agent run ${id} ${run.status}: ${run.error?.message ?? ""}`);
+    if (Date.now() - started > TIMEOUT_MS) throw new Error(`Agent run ${id} did not finish within 15 minutes`);
+    await Bun.sleep(POLL_MS);
+  }
 }

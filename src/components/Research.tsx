@@ -9,6 +9,7 @@ import { usePortfolio } from "./usePortfolio";
 import { companyHypothesisPath, companyPath } from "./routes";
 import {
   api,
+  CompanyAvatar,
   formatConfidence,
   formatDateTime,
   formatDuration,
@@ -26,7 +27,7 @@ import {
 function useTargets() {
   const { companies, hypotheses } = usePortfolio();
   const label = (t: RunTarget) => ({
-    company: companies.find((c) => c.id === t.companyId)?.name ?? t.companyId,
+    company: companies.find((c) => c.id === t.companyId) ?? { name: t.companyId, domain: "" },
     hypothesis: t.hypothesisId && (hypotheses.find((h) => h.id === t.hypothesisId)?.statement ?? t.hypothesisId),
   });
   return { companies, label };
@@ -36,9 +37,12 @@ function TargetCell({ target, label }: { target: RunTarget; label: ReturnType<ty
   const { company, hypothesis } = label(target);
   return (
     <TableCell className="max-w-80">
-      <a href={target.hypothesisId ? companyHypothesisPath(target.companyId, target.hypothesisId) : companyPath(target.companyId)} className="block truncate hover:underline">
-        <span className="font-medium">{company}</span>
-        {hypothesis && <span className="text-muted-foreground"> · {hypothesis}</span>}
+      <a href={target.hypothesisId ? companyHypothesisPath(target.companyId, target.hypothesisId) : companyPath(target.companyId)} className="flex items-center gap-2 hover:underline">
+        <CompanyAvatar company={company} className="size-5" />
+        <span className="truncate">
+          <span className="font-medium">{company.name}</span>
+          {hypothesis && <span className="text-muted-foreground"> · {hypothesis}</span>}
+        </span>
       </a>
     </TableCell>
   );

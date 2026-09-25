@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAsOf } from "./asof";
 import { companyPath, companyHypothesisPath } from "./routes";
-import { EvidenceTypeBadge, formatDate, withAsOf } from "./shared";
+import { CompanyAvatar, EvidenceTypeBadge, formatDate, withAsOf } from "./shared";
 import { usePortfolio } from "./usePortfolio";
 
 const LIMIT = 200;
@@ -59,7 +59,8 @@ export function Updates() {
                 <TableRow key={e.id} className="align-top">
                   <TableCell className="pl-4 align-top font-mono text-xs text-muted-foreground tabular-nums">{formatDate(at)}</TableCell>
                   <TableCell className="align-top">
-                    <a href={withAsOf(companyPath(company.id), asOf)} className="font-medium hover:underline">
+                    <a href={withAsOf(companyPath(company.id), asOf)} className="flex items-center gap-2 font-medium hover:underline">
+                      <CompanyAvatar company={company} className="size-5" />
                       {company.name}
                     </a>
                   </TableCell>

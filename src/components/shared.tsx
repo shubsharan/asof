@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Move } from "@/domain/changes";
-import type { Direction, Evidence, Hypothesis, Job, Run, RunTarget } from "@/domain/types";
+import type { Company, Direction, Evidence, Hypothesis, Job, Run, RunTarget } from "@/domain/types";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { usePortfolio } from "./usePortfolio";
 
@@ -106,6 +107,18 @@ export function formatDuration(fromIso: string, toIso: string) {
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
+/** A company's logo, fetched by its domain; its initial while loading or if there is none. */
+export const logoUrl = (domain: string) => `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+
+export function CompanyAvatar({ company, className = "size-6" }: { company: Pick<Company, "name" | "domain">; className?: string }) {
+  return (
+    <Avatar className={`rounded-md border bg-background ${className}`}>
+      <AvatarImage src={logoUrl(company.domain)} alt="" className="object-contain p-0.5" />
+      <AvatarFallback className="rounded-md text-[0.65em] font-medium">{company.name.charAt(0)}</AvatarFallback>
+    </Avatar>
+  );
 }
 
 /**

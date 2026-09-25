@@ -12,6 +12,7 @@ import { DeltaChip, DIRECTION, formatConfidence, VerdictBadge, withAsOf } from "
  */
 export function StripRow({
   title,
+  avatar,
   href,
   hypothesis: h,
   full,
@@ -20,6 +21,8 @@ export function StripRow({
   today,
 }: {
   title: string;
+  /** Shown before the title, e.g. the company's logo on a hypothesis page. */
+  avatar?: React.ReactNode;
   href: string;
   /** As of the cursor. */
   hypothesis: Hypothesis;
@@ -37,7 +40,10 @@ export function StripRow({
   return (
     <a href={withAsOf(href, asOf)} className={`group block border-t py-5 pl-3 hover:bg-muted/30 ${attention ? "border-l-2 border-l-red-500" : "border-l-2 border-l-transparent"}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="font-medium group-hover:underline">{title}</span>
+        <span className="flex items-center gap-2 font-medium">
+          {avatar}
+          <span className="group-hover:underline">{title}</span>
+        </span>
         <span className="flex items-baseline gap-2 font-mono tabular-nums">
           <VerdictBadge verdict={h.verdict} />
           <span className="text-xl">{formatConfidence(h.confidence)}</span>

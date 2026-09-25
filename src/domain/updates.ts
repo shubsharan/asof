@@ -11,7 +11,7 @@ export function updatesFeed(companies: Company[], { limit = 100 }: { limit?: num
     c.hypotheses.flatMap((h) =>
       h.evidence.map((evidence) => ({
         at: knownAt(evidence),
-        company: { id: c.id, name: c.name },
+        company: { id: c.id, name: c.name, domain: c.domain },
         hypothesis: { id: h.id, name: h.name, statement: h.statement },
         evidence,
       })),
