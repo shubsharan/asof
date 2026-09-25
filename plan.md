@@ -16,7 +16,7 @@
 - [ ] Optional: set Evidence `type` (supports / contradicts / neutral) with Jev `choice()` (see 4a)
 
 ## 3. Exa Agent
-- [ ] `POST /api/research/agent` → evidence + assessment → `recordEvidence` + `assessHypothesis` (+ `openQuestions` on versions)
+- [x] `POST /api/research/agent` → evidence + assessment → `recordEvidence` + `assessHypothesis` (+ `openQuestions` on versions)
 - [ ] Work out the confidence model with the team + agent (how evidence should move confidence)
 
 ## 3a. Backfill history through the app
