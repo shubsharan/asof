@@ -7,7 +7,7 @@ import {
   listPortfolio,
   recordEvidence,
   type NewEvidence,
-} from "../src/db/repo";
+} from "../src/db/queries";
 
 function setup() {
   const db = createDb(":memory:");

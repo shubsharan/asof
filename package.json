@@ -8,5 +8,9 @@
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "scripts": {
+    "seed": "bun src/db/seed.ts",
+    "test": "bun test"
   }
 }
