@@ -6,8 +6,8 @@
 - [x] Thesis logic in `src/domain/thesis.ts`: `thesisAsOf(date)`, compare two dates (no built-in confidence model)
 - [x] Queries in `src/db/queries.ts`: `createHypothesis` (starts untested), `recordEvidence` (attaches only), `assessHypothesis` (must cite evidence), `getCompany(asOf?)`, `listPortfolio`
 - [x] Seed Exa + Perplexity, Brave, Parallel, Tavily, 4 untested hypotheses each (structure only — no evidence, no assessments)
-- [ ] `server.ts` replaces `index.ts`; routes: portfolio, company, hypothesis, compare (all accept `?asOf=`)
-- [ ] Scripts: `dev`, `seed`, `test`; tests pass
+- [x] `src/server.ts` replaces `index.ts`; routes: portfolio, company (`?asOf=`)
+- [x] Scripts: `dev`, `seed`, `test`; tests pass
 
 ## 2. Exa Search
 - [ ] `bun add exa-js`, `EXA_API_KEY` in `.env`
@@ -40,13 +40,14 @@ Fast, cheap typed decisions between Exa calls. No prose — Agent still writes `
 
 ## 5. Exa Snapshot
 - [ ] `POST /api/snapshot` → search limited to what was available by a date
-- [ ] Compare "then vs today" using `thesisAsOf` + compare
+- [ ] Compare "then vs today" in the UI: fetch the company at both dates, diff with `compareThesis`
 
 ## 6. UI
-- [ ] `index.html` + `src/main.tsx` (React via Bun HTML imports)
+- [ ] `src/index.html` + `src/main.tsx` (React via Bun HTML imports)
 - [ ] Portfolio → Target overview → Hypothesis detail → Rewind timeline
 
 ## Notes
+- All code lives under `src/` (tests in `tests/`, generated data in `data/`); nothing but config at the repo root.
 - Verify the current `exa-js` API before each Exa step.
 - Verify the current `@typesafe-ai/sdk` API before 4a (untested so far).
 - Present Jev as supporting infrastructure; the demo story stays the four Exa products.

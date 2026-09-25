@@ -1,6 +1,6 @@
 {
   "name": "asof",
-  "module": "index.ts",
+  "module": "src/server.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -10,6 +10,7 @@
     "typescript": "^7"
   },
   "scripts": {
+    "dev": "bun --hot src/server.ts",
     "seed": "bun src/db/seed.ts",
     "test": "bun test"
   }
