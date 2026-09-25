@@ -37,8 +37,11 @@ but pointing neither way. Drop pages that do not bear on the hypothesis. Never g
 
 type Item = { url: string; claim: string; sourceReasoning: string; type: NewEvidence["type"] };
 
-/** Searches the web for credible evidence for and against one hypothesis about a company. */
-export async function searchEvidence(company: Company, hypothesis: Hypothesis): Promise<NewEvidence[]> {
+/**
+ * Searches the web for credible evidence for and against one hypothesis about a company.
+ * With `asOf`, only pages published on or before that date are returned.
+ */
+export async function searchEvidence(company: Company, hypothesis: Hypothesis, asOf?: string): Promise<NewEvidence[]> {
   const subject = `${company.name} (${company.description})`;
   // One query per direction, phrased as what each outcome would look like, so contradicting evidence surfaces.
   const queries = [
@@ -53,6 +56,7 @@ export async function searchEvidence(company: Company, hypothesis: Hypothesis): 
         systemPrompt: systemPrompt(subject, hypothesis.statement),
         outputSchema: OUTPUT_SCHEMA,
         contents: { highlights: true },
+        endPublishedDate: asOf,
       }),
     ),
   );

@@ -50,6 +50,7 @@ export function createDb(path = DB_PATH): Database {
   const db = new Database(path, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
+  db.run("PRAGMA busy_timeout = 5000"); // backfill runs several writers at once
   db.run(SCHEMA);
   return db;
 }

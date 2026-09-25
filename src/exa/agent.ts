@@ -36,8 +36,11 @@ export type Evaluation = Omit<HypothesisVersion, "asOf" | "evidenceIds"> & {
   newEvidence: NewEvidence[];
 };
 
-/** Runs Exa Agent to research and assess one hypothesis, starting from the evidence already recorded. */
-export async function evaluateHypothesis(company: Company, hypothesis: Hypothesis): Promise<Evaluation> {
+/**
+ * Runs Exa Agent to research and assess one hypothesis, starting from the evidence already recorded.
+ * With `asOf`, it is asked to assess as the team could have on that date.
+ */
+export async function evaluateHypothesis(company: Company, hypothesis: Hypothesis, asOf?: string): Promise<Evaluation> {
   const current = hypothesis.history.at(-1);
   const run = await exa.agent.runs.createAndWait({
     effort: "auto",
@@ -51,7 +54,12 @@ contradicts the hypothesis and the credibility of the key sources. Then assess:
 - citedUrls: the URLs, from the input data or newEvidence, that the assessment rests on.
 - newEvidence: credible sources not in the input data. claim states the specific fact the page reports;
   sourceReasoning says who published it and how credible it is.
-- openQuestions: what would most change your view.`,
+- openQuestions: what would most change your view.${
+      asOf
+        ? `\nAssess as of ${asOf}: use only information published on or before that date and ignore anything you know
+about later events. Every newEvidence item must have a publishedAt on or before ${asOf}.`
+        : ""
+    }`,
     input: { data: hypothesis.evidence },
     outputSchema: OUTPUT_SCHEMA,
   }, { timeoutMs: 15 * 60_000 }); // runs take several minutes; the SDK default gives up at 2

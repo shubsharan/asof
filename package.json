@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "bun --hot src/server.ts",
     "seed": "bun src/db/seed.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "backfill": "bun src/scripts/backfill.ts"
   },
   "dependencies": {
     "exa-js": "^2.23.0",
