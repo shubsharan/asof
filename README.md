@@ -209,11 +209,41 @@ This is the screen that makes Snapshot obvious to the interviewer.
 
 ## Implementation
 
-Keep it simple.
+Keep it simple. The whole app runs on [Bun](https://bun.sh): one process, one command, no Vite, no Hono/Express.
+
+- **Server:** `Bun.serve()` with its built-in `routes` (methods and path params included)
+- **Front end:** Bun HTML imports. `index.html` is imported into the server and Bun bundles the React/TSX (HMR in dev)
+- **Storage:** `bun:sqlite`, built in
+- **Dependencies:** `react`, `react-dom`, `exa-js`
+
+```ts
+// server.ts
+import index from "./index.html";
+import { Database } from "bun:sqlite";
+
+const db = new Database("asof.sqlite");
+
+Bun.serve({
+  routes: {
+    "/*": index, // React app
+    "/api/research/search": { POST: async (req) => Response.json(await search(await req.json())) },
+    "/api/research/agent":  { POST: async (req) => Response.json(await runAgent(await req.json())) },
+    "/api/monitor/create":  { POST: async (req) => Response.json(await createMonitor(await req.json())) },
+    "/api/monitor/events":  { GET: () => Response.json(listMonitorEvents()) },
+    "/api/snapshot":        { POST: async (req) => Response.json(await snapshot(await req.json())) },
+  },
+  development: { hmr: true, console: true },
+});
+```
+
+```bash
+bun install
+bun --hot server.ts
+```
 
 ### Front end
 
-Basic Vite + React app. Components:
+React, bundled by Bun from `index.html` → `src/main.tsx`. Components:
 
 ```text
 Portfolio
@@ -226,17 +256,17 @@ Timeline / Rewind
 
 ### Back end
 
-A lightweight Node/Hono server:
+The same `Bun.serve()` process, under `/api` so the routes don't collide with the front end:
 
 ```text
-POST /research/search
-POST /research/agent
-POST /monitor/create
-GET  /monitor/events
-POST /snapshot
+POST /api/research/search
+POST /api/research/agent
+POST /api/monitor/create
+GET  /api/monitor/events
+POST /api/snapshot
 ```
 
-State lives in JSON or SQLite.
+State lives in SQLite via `bun:sqlite`.
 
 ### Out of scope
 
