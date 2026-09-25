@@ -165,15 +165,15 @@ function Trails({ from, to, k, rows }: { from: Slice; to: Slice; k: number; rows
   );
 }
 
-/** Row labels along the base of the front slice, each to the left of its column. */
+/** Row labels along the base of the front slice, each below and to the right of its column. */
 function ColumnLabels({ rows, k, asOf, avatar }: { rows: SliceRow[]; k: number; asOf?: string; avatar?: (rowId: string) => ReactNode }) {
   return (
     <>
       {rows.map((row, i) => {
         const p = project(columnU(i), -ISO.planeHeight / 2, sliceW(k));
         return (
-          <foreignObject key={row.id} x={p.x - 10 - LABEL_WIDTH} y={p.y - LABEL_HEIGHT / 2} width={LABEL_WIDTH} height={LABEL_HEIGHT}>
-            <div className="flex h-full items-center justify-end gap-1.5 text-xs">
+          <foreignObject key={row.id} x={p.x + 8} y={p.y + 2} width={LABEL_WIDTH} height={LABEL_HEIGHT}>
+            <div className="flex h-full items-center justify-start gap-1.5 text-xs">
               {avatar?.(row.id)}
               {row.href ? (
                 <a href={withAsOf(row.href, asOf)} className="truncate hover:underline">

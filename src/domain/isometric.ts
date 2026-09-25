@@ -21,7 +21,7 @@ export const ISO = {
 };
 
 /** Padding around the panels for the date labels (top/right) and column labels (bottom/left). */
-export const PAD = { top: 24, right: 16, bottom: 48, left: 150 };
+export const PAD = { top: 24, right: 160, bottom: 40, left: 16 };
 
 const COS = Math.sqrt(3) / 2;
 const SIN = 0.5;
