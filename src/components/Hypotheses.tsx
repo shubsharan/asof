@@ -3,6 +3,8 @@ import { timeDomain } from "@/domain/timeline";
 import { useAsOf } from "./asof";
 import { companyHypothesisPath, hypothesisPath } from "./routes";
 import { CompanyAvatar, withAsOf } from "./shared";
+import { SliceChart } from "./SliceChart";
+import { companyRows } from "./sliceRows";
 import { StripRow } from "./StripRow";
 import { usePortfolio } from "./usePortfolio";
 
@@ -12,7 +14,7 @@ import { usePortfolio } from "./usePortfolio";
  */
 export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
   const { hypotheses, companies, companiesAsOf, loaded } = usePortfolio();
-  const { asOf, today } = useAsOf();
+  const { asOf, setAsOf, today } = useAsOf();
   const domain = useMemo(() => timeDomain(companies, today), [companies, today]);
   if (!loaded) return null;
 
@@ -43,6 +45,20 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
                   {ph.statement}
                 </a>
               </h2>
+            )}
+            {hypothesisId && (
+              <div className="mb-8">
+                <SliceChart
+                  rows={companyRows(companies, ph.id)}
+                  asOf={asOf}
+                  today={today}
+                  onPickDate={setAsOf}
+                  avatar={(rowId) => {
+                    const c = companies.find((x) => x.id === rowId);
+                    return c ? <CompanyAvatar company={c} /> : null;
+                  }}
+                />
+              </div>
             )}
             {drawn.map(({ company, h, full }) => (
               <StripRow

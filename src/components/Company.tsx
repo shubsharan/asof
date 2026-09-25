@@ -7,6 +7,8 @@ import { CompanyCompare } from "./Compare";
 import { usePortfolio } from "./usePortfolio";
 import { companyHypothesisPath } from "./routes";
 import { CompanyAvatar, openResearch, useCompany } from "./shared";
+import { SliceChart } from "./SliceChart";
+import { hypothesisRows } from "./sliceRows";
 import { StripRow } from "./StripRow";
 
 /**
@@ -16,7 +18,7 @@ import { StripRow } from "./StripRow";
 export function Company({ id }: { id: string }) {
   const { company: view, today: full } = useCompany(id);
   const { companies } = usePortfolio();
-  const { asOf, today } = useAsOf();
+  const { asOf, setAsOf, today } = useAsOf();
   const domain = useMemo(() => timeDomain(companies, today), [companies, today]);
   if (!view || !full) return null;
 
@@ -63,6 +65,10 @@ export function Company({ id }: { id: string }) {
           <CompanyCompare view={view} full={full} asOf={asOf} />
         </div>
       )}
+
+      <div className="mt-8">
+        <SliceChart rows={hypothesisRows(full)} asOf={asOf} today={today} onPickDate={setAsOf} />
+      </div>
 
       <div className="mt-8">
         {view.hypotheses.map((h) => (
