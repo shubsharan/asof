@@ -12,7 +12,7 @@ import { HistoryControls } from "./TimeScrubber";
  */
 export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
   const { hypotheses, companies, companiesAsOf, loaded } = usePortfolio();
-  const { asOf } = useAsOf();
+  const { asOf, mode } = useAsOf();
   if (!loaded) return null;
 
   const shown = hypothesisId ? hypotheses.filter((ph) => ph.id === hypothesisId) : hypotheses;
@@ -32,7 +32,7 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
           const full = companies[i]!.hypotheses.find((x) => x.id === ph.id);
           return h && full ? [{ company: view, h, full }] : [];
         });
-        const researchRows = companyRows(companies, ph.id);
+        const researchRows = companyRows(companies, ph.id, mode);
 
         return (
           <section key={ph.id} className="mt-10">
@@ -46,7 +46,7 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
             {hypothesisId && researchRows.length > 0 && (
               <details className="mb-8 rounded border p-4">
                 <summary className="cursor-pointer font-medium">Research over time</summary>
-                <p className="mt-2 text-sm text-muted-foreground">How Exa's assessments changed. Historical reconstructions use their research cutoff dates.</p>
+                <p className="mt-2 text-sm text-muted-foreground">{mode === "recorded" ? "Recorded assessments and when evidence was collected." : "Retrospective assessments by research cutoff. Source dots use publication dates, not when AsOf knew them."}</p>
                 <div className="mt-4">
                   <SliceChartCard
                     rows={researchRows}

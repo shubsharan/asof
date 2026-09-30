@@ -1,5 +1,6 @@
 import type { Company, Direction, Evidence, HypothesisVersion } from "./types";
 import { knownAt } from "./thesis";
+import type { HistoryMode } from "./research";
 
 // Everything here works in UTC day strings ("YYYY-MM-DD"), like thesisAsOf: `Date.parse` of such a
 // string is UTC midnight, so day arithmetic never depends on the machine's timezone.
@@ -26,9 +27,12 @@ const LEAD_IN = 0.5;
  * From a little before the portfolio's first assessment (a year back if nothing is assessed yet)
  * to today, stretched if any assessment or evidence is dated later than today.
  */
-export function timeDomain(companies: Company[], today: string): Domain {
+export function timeDomain(companies: Company[], today: string, mode: HistoryMode = "recorded"): Domain {
   const assessed = companies.flatMap((c) => c.hypotheses.flatMap((h) => h.history.map((v) => day(v.asOf))));
-  const known = companies.flatMap((c) => c.hypotheses.flatMap((h) => h.evidence.map((e) => day(knownAt(e)))));
+  const known = companies.flatMap((c) => c.hypotheses.flatMap((h) => h.evidence.flatMap((e) => {
+    const date = mode === "recorded" ? knownAt(e) : e.publishedAt;
+    return date ? [day(date)] : [];
+  })));
   const first = assessed.toSorted()[0];
   const start = first ? addDays(first, -START_PADDING_DAYS) : addDays(today, -FALLBACK_SPAN_DAYS);
   const end = [today, ...assessed, ...known].toSorted().at(-1)!;

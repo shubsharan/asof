@@ -16,7 +16,8 @@
     "dev": "bun --hot src/server.ts",
     "seed": "bun src/db/seed.ts",
     "test": "bun test",
-    "backfill": "bun src/scripts/backfill.ts"
+    "backfill": "bun src/scripts/backfill.ts",
+    "rehearse": "bun src/scripts/rehearse.ts"
   },
   "dependencies": {
     "bun-plugin-tailwind": "^0.1.2",

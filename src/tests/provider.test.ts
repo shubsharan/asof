@@ -40,7 +40,7 @@ test("search preserves native highlights and grounding", () => {
     requestId: "search-1",
     results: [{ id: "one", title: "Launch", url: "https://acme.example/news", publishedDate: "2026-09-27", highlights: ["Acme launched the product."] }],
     output: {
-      content: { evidence: [{ url: "https://acme.example/news", claim: "Acme launched the product.", sourceReasoning: "Company announcement", type: "supports" }] },
+      content: { evidence: [{ url: "https://acme.example/news", claim: "Acme launched the product.", excerpt: "Acme launched the product.", relevanceReason: "A product launch can signal adoption", sourceReasoning: "Company announcement", type: "supports" }] },
       grounding: [{ field: "evidence[0]", confidence: "high", citations: [{ url: "https://acme.example/news", title: "Launch" }] }],
     },
   };
@@ -48,6 +48,7 @@ test("search preserves native highlights and grounding", () => {
   expect(searchResponseEvidence(response, "acme.example")).toEqual([{
     title: "Launch",
     claim: "Acme launched the product.",
+    relevanceReason: "A product launch can signal adoption",
     url: "https://acme.example/news",
     publishedAt: "2026-09-27",
     type: "supports",
@@ -59,13 +60,13 @@ test("search preserves native highlights and grounding", () => {
 });
 
 test("malformed and unsupported structured output fails visibly", () => {
-  expect(() => parseEvaluation({ verdict: "supports", confidence: 80, reasoning: "", openQuestions: [], citedUrls: [], newEvidence: [] })).toThrow(/malformed/);
-  const evaluation = parseEvaluation({ verdict: "supports", confidence: 80, reasoning: "Grounded", openQuestions: [], citedUrls: ["https://invented.example"], newEvidence: [] });
+  expect(() => parseEvaluation({ verdict: "supports", confidence: 80, reasoning: "", openQuestions: [], citedEvidenceIds: [], newClaims: [] })).toThrow(/malformed/);
+  const evaluation = parseEvaluation({ verdict: "supports", confidence: 80, reasoning: "Grounded", changeReason: "Initial", openQuestions: [], consideredEvidenceIds: ["invented"], citedEvidenceIds: ["invented"], decisiveEvidenceIds: [], newClaims: [] });
   const hypothesis: Hypothesis = {
     id: "moat", name: "Moat", statement: "Moat grows", verdict: "untested", history: [], evidence: [], reportCount: 0, developmentCount: 0,
   };
   const nativeGrounding = [{ field: "citedUrls[0]", citations: [{ url: "https://invented.example" }] }];
-  expect(() => verifyEvaluationCitations(evaluation, hypothesis, nativeGrounding)).toThrow(/unsupported URL\(s\).*invented\.example/);
+  expect(() => verifyEvaluationCitations(evaluation, hypothesis, nativeGrounding)).toThrow(/outside its passage-backed input/);
   expect(() => parseGrounding([{ field: "evidence", citations: [{ url: "javascript:alert(1)" }] }])).toThrow(/malformed native grounding/);
 });
 
@@ -179,12 +180,13 @@ test("snapshot rejects invalid input before calling the provider", async () => {
 });
 
 test("source classifications come from structured research and reject invalid values", () => {
-  const assessment = { verdict:"supports", confidence:80, reasoning:"Retention increased", openQuestions:[], citedUrls:["https://publisher.example/report"], newEvidence:[{url:"https://publisher.example/report",title:"Report",claim:"Retention increased",type:"supports",sourceReasoning:"Independent reporting",sourceRelationship:"independent"}] };
-  expect(parseEvaluation(assessment).newEvidence[0]!.sourceRelationship).toBe("independent");
-  expect(() => parseEvaluation({...assessment,newEvidence:[{...assessment.newEvidence[0],sourceRelationship:"invented"}]})).toThrow(/source relationship/);
+  const claim = {ref:"local-1",url:"https://publisher.example/report",title:"Report",claim:"Retention increased",excerpt:"Retention increased",relevanceReason:"Retention indicates moat strength",type:"supports",sourceReasoning:"Independent reporting",sourceRelationship:"independent"};
+  const assessment = { verdict:"supports", confidence:80, reasoning:"Retention increased", changeReason:"Initial", openQuestions:[], consideredEvidenceIds:["local-1"], citedEvidenceIds:["local-1"], decisiveEvidenceIds:["local-1"], newClaims:[claim] };
+  expect(parseEvaluation(assessment).newClaims[0]!.sourceRelationship).toBe("independent");
+  expect(() => parseEvaluation({...assessment,newClaims:[{...claim,sourceRelationship:"invented"}]})).toThrow(/malformed claim/);
   const response: SearchResponse<{ highlights:true }> = {
     requestId:"fixture",results:[{id:"one",title:"Report",url:"https://publisher.example/report",highlights:[]}],
-    output:{content:{evidence:assessment.newEvidence},grounding:[]},
+    output:{content:{evidence:[claim]},grounding:[]},
   };
   expect(searchResponseEvidence(response,"acme.example")[0]!.sourceRelationship).toBe("independent");
 });

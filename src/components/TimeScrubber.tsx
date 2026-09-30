@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { normalizeAsOf, useAsOf } from "./asof";
 import { usePortfolio } from "./usePortfolio";
-import { formatDate, formatDateTime } from "./shared";
+import { formatDate, formatDateTime, formatResearchTime } from "./shared";
 import { useWidth } from "./useWidth";
 
 const HEIGHT = 34;
@@ -24,11 +24,11 @@ const LABEL_GAP = 44;
  */
 function useScrubber(companyId?: string, hypothesisId?: string) {
   const { companies, loaded } = usePortfolio();
-  const { asOf, setAsOf, today } = useAsOf();
+  const { asOf, setAsOf, mode, today } = useAsOf();
   const scope = useMemo(() => companies.filter((c) => !companyId || c.id === companyId).map((c) => ({ ...c,
     hypotheses: c.hypotheses.filter((h) => !hypothesisId || h.id === hypothesisId),
   })), [companies, companyId, hypothesisId]);
-  const domain = useMemo(() => timeDomain(scope, today), [scope, today]);
+  const domain = useMemo(() => timeDomain(scope, today, mode), [scope, today, mode]);
   const checkpoints = useMemo(() => assessmentDays(scope, today), [scope, today]);
   const cursor = asOf?.slice(0, 10) ?? today;
 
@@ -45,19 +45,27 @@ type Scrub = ReturnType<typeof useScrubber>;
 
 /** Explicit entry to the recorded history of this page. */
 export function HistoryControls({ companyId, hypothesisId }: { companyId?: string; hypothesisId?: string }) {
-  const { asOf, setAsOf } = useAsOf();
+  const { asOf, setAsOf, mode, setMode, assessmentId } = useAsOf();
+  const { rawCompanies } = usePortfolio();
   const [open, setOpen] = useState(false);
   const scrub = useScrubber(companyId, hypothesisId);
-  if (!open && !asOf) return <Button className="mt-4" size="sm" variant="outline" onClick={() => setOpen(true)}>View history</Button>;
+  const selected = rawCompanies.find((company) => company.id === companyId)?.hypotheses.find((hypothesis) => hypothesis.id === hypothesisId)?.researchHistory?.find((item) => item.id === assessmentId);
+  if (!open && !asOf && assessmentId === undefined && mode === "recorded") return <Button className="mt-4" size="sm" variant="outline" onClick={() => setOpen(true)}>View history</Button>;
   return (
     <section aria-label="Research history" className="mt-4 rounded border border-amber-200 bg-amber-50/50 p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium">{asOf ? `Research as of ${asOf.length > 10 ? formatDateTime(asOf) : formatDate(asOf)}` : "Research history"}</p>
-          <p className="text-xs text-muted-foreground">{asOf ? "Historical AI research. Reconstructed assessments use sources published by their cutoff date." : "Choose a date to explore earlier AI assessments and sources."}</p>
+          <p className="text-sm font-medium">{mode === "reconstruction" ? "Reconstructed research" : "Recorded research"}{asOf ? ` · ${mode === "reconstruction" ? "cutoff" : "recorded by"} ${asOf.length > 10 ? formatDateTime(asOf) : formatDate(asOf)}` : ""}</p>
+          <p className="text-xs text-muted-foreground">{selected?.origin === "reconstruction" ? `Generated ${selected.recordedAt ? formatResearchTime(selected.recordedAt) : "at an unavailable time"}. ` : ""}{mode === "reconstruction" ? "Retrospective research uses publication cutoffs. Saved page text may have been captured later and does not prove what was known then." : "Browse assessments by when AsOf recorded them."}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => { setAsOf(undefined); setOpen(false); }}>{asOf ? "Back to today" : "Close history"}</Button>
+        <Button size="sm" variant="outline" onClick={() => { setMode("recorded"); setAsOf(undefined); setOpen(false); }}>Back to today</Button>
       </div>
+      <label className="mb-3 grid max-w-52 gap-1 text-xs text-muted-foreground">History type
+        <select className="h-9 rounded border bg-background px-2 text-sm text-foreground" value={mode} onChange={(event) => setMode(event.target.value === "reconstruction" ? "reconstruction" : "recorded")}>
+          <option value="recorded">Recorded research</option>
+          <option value="reconstruction">Reconstructions</option>
+        </select>
+      </label>
       <TimeScrubberCard scrub={scrub} />
     </section>
   );

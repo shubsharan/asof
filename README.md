@@ -1,17 +1,21 @@
 # AsOf
 
-AsOf is a small Exa-powered research applet. Pick a company and a question to see Exa's assessment, the sources behind it, and how the research has changed over time.
+AsOf is a small Exa-powered research applet. Follow a hypothesis through collected sources, passage-backed claims, an AI assessment, and an explanation of what changed.
 
 ## Using the app
 
 - Research opens on company summaries. Select a question for the analysis and citations.
-- Refresh research asks Exa Agent to investigate and saves its answer directly as AI research. There is no source approval or analyst assessment workflow.
-- Watch this company uses Exa Monitor to find new developments. Updates shows the sources it finds; refresh a question to assess their implications.
-- Earlier research and Research over time show previous assessments. Historical reconstructions use a publication cutoff and are labeled as such.
+- Each question has a rubric stating what would support or challenge it and the comparison period. The default period is the preceding 12 months, with comparable earlier periods where available.
+- Refresh research asks Exa Agent to investigate leads, weigh claims, and propose an assessment. AsOf saves the result after checking exact claim references and matching new supporting passages to captured source text. A passage match establishes attribution, not truth.
+- Watch this company uses Exa Monitor to find new developments. Its updates are collected leads. Refresh remains explicit; new material does not automatically change a conclusion.
+- The question page separates unresolved leads from claims awaiting assessment. Considered claims can remain uncited. Evidence arriving during a run remains pending, and a failed refresh keeps the previous assessment.
+- Recorded history uses assessment recording time and evidence discovery time. Reconstructions use a research cutoff and show when they were generated. They are retrospective research, not proof of what was knowable at the cutoff.
 
-Source cards show the reported fact, publisher, date when available, and a link. Opening a source shows its saved excerpt immediately. Compare with latest retrieves current text on request and highlights changed passages; full text, provenance, and an optional historical date stay under details.
+Claim cards show the reported fact. Opening a claim shows its relevance to the hypothesis, exact saved passage, and source. Leads and legacy evidence remain labeled; a saved text preview is not presented as a supporting quotation. Compare with latest retrieves current text on request and highlights changed passages.
 
-All assessments shown in the main experience are AI research. Existing analyst decisions and source reviews remain stored for compatibility, but are not approval gates. Previously excluded sources remain excluded from generation. Old pending proposals can be read as AI research without accepting them. Source versions and historical records are preserved; no migration or recapture of imported sources is needed.
+New assessments retain their predecessor, input and considered evidence IDs, decisive citations, provider provenance, and the hypothesis rubric used. Confidence describes confidence in the verdict, not the probability that the hypothesis is true. Inconclusive can mean conflicting evidence or insufficient evidence; the reasoning explains which.
+
+Existing analyst decisions, proposals, source reviews, and historical citations remain stored for compatibility. They do not become new recorded AI assessments. Previously excluded sources remain excluded from generation. Migration labels existing evidence as legacy without inventing supporting passages. A legacy item can guide research but needs a newly extracted passage-backed claim before it can be cited in a new assessment.
 
 ## Application routes
 
@@ -36,6 +40,8 @@ The application uses Bun, React, SQLite through `bun:sqlite`, the Exa SDK, and t
 
 Company monitoring uses a daily Exa Agent Monitor and hourly local collection. Exa can refresh remotely while AsOf is closed. AsOf imports those results only while its server is running. Collection adds sources; assessment jobs save AI research directly.
 
+New monitors include the hypothesis rubrics. Existing remote monitors keep their creation-time configuration; restarting a watch creates a monitor with the current rubric.
+
 ## Local commands
 
 ```sh
@@ -58,6 +64,19 @@ Historical research can be generated with the backfill command. Its --reset opti
 bun run backfill <companyId> [hypothesisId...] --dates YYYY-MM-DD,YYYY-MM-DD
 ```
 
+The read API and browser share history selection. `/api/companies?history=recorded` is the default; `history=reconstruction` selects publication-cutoff research. `asOf` filters that mode's clock, and `assessmentId` selects an exact saved assessment, including repeated reconstructions for the same cutoff. The browser fetches `/api/companies?raw=1` once and applies the same selector locally.
+
+## Provider-free rehearsal
+
+Create a new disposable database with synthetic sources and two recorded assessments. The script refuses to overwrite an existing file and makes no provider calls.
+
+```sh
+bun run rehearse /tmp/asof-rehearsal.sqlite
+ASOF_DB_PATH=/tmp/asof-rehearsal.sqlite PORT=3108 bun run dev
+```
+
+Open `/c/fixture/h/adoption`. Inspect the rubric, the two claims from one source page, their supporting passages, and the explanation of the move from inconclusive to supported. Earlier research opens the exact first assessment. The company and analysis explicitly identify this as a fixture rehearsal. Refreshing through the app still uses the configured provider; creating the fixture does not substitute a fake provider into normal operation.
+
 ## Verification
 
 ```sh
@@ -79,6 +98,6 @@ if (!result.success) throw new AggregateError(result.logs, "Build failed");
 TS
 ```
 
-Routine tests use deterministic provider fixtures. Live Search, Agent, Monitor, and Snapshot checks use a disposable database and are recorded separately in [the delivery record](docs/evidence-review-delivery.md). Temporary remote monitors must be removed after those checks.
+Routine tests use deterministic provider fixtures. See [research handoff verification](docs/research-handoffs-delivery.md) for this implementation and [earlier delivery checks](docs/evidence-review-delivery.md) for prior provider runs. Live Search, Agent, Monitor, and Snapshot checks use a disposable database. Temporary remote monitors must be removed after those checks.
 
 Authentication, collaboration, additional providers, and presentation preparation are outside this implementation.

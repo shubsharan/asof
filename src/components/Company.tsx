@@ -16,11 +16,11 @@ import { HistoryControls } from "./TimeScrubber";
  */
 export function Company({ id }: { id: string }) {
   const { company: view, today: full, reload } = useCompany(id);
-  const { asOf } = useAsOf();
+  const { asOf, mode } = useAsOf();
   if (!view || !full) return null;
 
   const assessed = view.hypotheses.filter((h) => h.history.length);
-  const researchRows = hypothesisRows(full);
+  const researchRows = hypothesisRows(full, mode);
 
   return (
     <>
@@ -35,7 +35,7 @@ export function Company({ id }: { id: string }) {
             {assessed.length === 0 ? <span className="text-muted-foreground">No AI assessments yet.</span> : `${assessed.length} of ${view.hypotheses.length} questions researched`}
           </p>
         </div>
-        {!asOf && (
+        {!asOf && mode === "recorded" && (
           <Button variant="outline" onClick={() => openResearch({ job: "assess", companyId: id })}>
             Research a question
           </Button>
@@ -43,19 +43,19 @@ export function Company({ id }: { id: string }) {
       </div>
 
       <HistoryControls companyId={id} />
-      {!asOf && <WatchPanel companyId={id} onChanged={reload} />}
+      {!asOf && mode === "recorded" && <WatchPanel companyId={id} onChanged={reload} />}
 
       {researchRows.length > 0 && (
         <details className="mt-6 rounded border p-4">
           <summary className="cursor-pointer font-medium">Research over time</summary>
-          <p className="mt-2 text-sm text-muted-foreground">How Exa's assessments changed. Historical reconstructions use their research cutoff dates.</p>
+          <p className="mt-2 text-sm text-muted-foreground">{mode === "recorded" ? "Recorded assessments and when evidence was collected." : "Retrospective assessments by research cutoff. Source dots use publication dates, not when AsOf knew them."}</p>
           <div className="mt-4">
             <SliceChartCard rows={researchRows} />
           </div>
         </details>
       )}
 
-      {asOf && (
+      {asOf && mode === "recorded" && (
         <div className="mt-6">
           <CompanyCompare view={view} full={full} asOf={asOf} />
         </div>

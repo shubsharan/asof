@@ -63,12 +63,16 @@ test("Agent receives relevant and disputed evidence, while evidence arriving dur
     inputIds = hypothesis.evidence.map((e) => e.id);
     const late = recordEvidence(db, "acme", "moat", [{ title: "Late", claim: "late", url: "https://late", type: "supports" }], "monitor", "2026-09-28T10:04:00Z")[0]!;
     reviewEvidence(db, late.id, { decision: "relevant" }, "2026-09-28T10:05:00Z");
-    return { evaluation: { verdict: "neutral", confidence: 60, reasoning: "Mixed", openQuestions: [],
-      citedUrls: [relevant.url, disputed.url], newEvidence: [] },
+    return { evaluation: { verdict: "neutral", confidence: 60, reasoning: "Mixed", changeReason: "Initial recorded assessment", openQuestions: [],
+      consideredEvidenceIds: ["r", "d"], citedEvidenceIds: ["r", "d"], decisiveEvidenceIds: ["r", "d"], newClaims: [
+        { ref: "r", title: "Relevant", claim: "Relevant fact", excerpt: "Relevant fact", relevanceReason: "Bears on moat", url: relevant.url, type: "supports" as const },
+        { ref: "d", title: "Disputed", claim: "Disputed fact", excerpt: "Disputed fact", relevanceReason: "Bears on moat", url: disputed.url, type: "contradicts" as const },
+      ] },
       providerRunId: "fixture", rawOutput: {}, grounding: [] };
-  });
+  }, async (urls) => new Map(urls.map((url) => [url, { status: "retrieved" as const, url, text: url === relevant.url ? "Relevant fact" : "Disputed fact", retrievedAt: "2026-09-28T10:05:00Z" }])));
   expect(new Set(inputIds)).toEqual(new Set([relevant.id, disputed.id]));
-  expect(new Set(proposal.evidenceIds)).toEqual(new Set([relevant.id, disputed.id]));
+  expect(proposal.evidenceIds).toHaveLength(2);
+  expect(proposal.evidenceIds).not.toContain(relevant.id);
   expect(getCompany(db, "acme")!.hypotheses[0]!.reviewCounts!.pending).toBe(3);
 });
 
@@ -76,7 +80,7 @@ test("Assess rejects citations to irrelevant evidence", async () => {
   const { db, irrelevant } = setup();
   const loaded = loadHypothesis(db, "acme", "moat")!;
   await expect(runAssess(db, loaded.company, loaded.hypothesis, undefined, async () => ({
-    evaluation: { verdict: "neutral", confidence: 60, reasoning: "Mixed", openQuestions: [], citedUrls: [irrelevant.url], newEvidence: [] },
+    evaluation: { verdict: "neutral", confidence: 60, reasoning: "Mixed", changeReason: "Initial recorded assessment", openQuestions: [], consideredEvidenceIds: [irrelevant.id], citedEvidenceIds: [irrelevant.id], decisiveEvidenceIds: [], newClaims: [] },
     providerRunId: "fixture", rawOutput: {}, grounding: [],
-  }))).rejects.toThrow(/not recorded or allowed/);
+  }))).rejects.toThrow(/outside its frozen passage-backed input/);
 });

@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { companyPath, companyHypothesisPath } from "./routes";
 import { SourceInspector } from "./SnapshotDialog";
-import { CompanyAvatar, EvidenceTypeBadge, formatDateTime } from "./shared";
+import { CompanyAvatar, EvidenceTypeBadge, evidenceKindLabel, formatDateTime } from "./shared";
 import { usePortfolio } from "./usePortfolio";
 
 const ALL = "all";
@@ -13,7 +13,7 @@ const dateParam = (name: string) => new URLSearchParams(location.search).get(nam
 
 /** Evidence across the current portfolio, newest first by when AsOf recorded it. */
 export function Updates() {
-  const { companies, loaded } = usePortfolio();
+  const { rawCompanies: companies, loaded } = usePortfolio();
   const [companyId, setCompanyId] = useState(ALL);
   const [from, setFrom] = useState(() => dateParam("from"));
   const [to, setTo] = useState(() => dateParam("to"));
@@ -34,7 +34,7 @@ export function Updates() {
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Updates</h1>
-          <p className="text-muted-foreground">Recent sources found by Exa. Open a question to see what they mean.</p>
+          <p className="text-muted-foreground">Sources collected by Exa. Monitor summaries are leads to inspect, not quotations from a page.</p>
         </div>
         <label className="grid gap-1 text-xs text-muted-foreground">Recorded from<input type="date" className="h-8 rounded border bg-background px-2 text-sm text-foreground" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
         <label className="grid gap-1 text-xs text-muted-foreground">Recorded to<input type="date" className="h-8 rounded border bg-background px-2 text-sm text-foreground" value={to} onChange={(event) => setTo(event.target.value)} /></label>
@@ -53,16 +53,16 @@ export function Updates() {
         </Select>
       </div>
       {rangeError && <p role="alert" className="mb-4 text-sm text-destructive">{rangeError}</p>}
-      {loaded && !rangeError && updates.length === 0 && <p className="text-sm text-muted-foreground">No evidence was recorded in this range.</p>}
+      {loaded && !rangeError && updates.length === 0 && <p className="text-sm text-muted-foreground">No sources were recorded in this range.</p>}
       {updates.length > 0 && (
-        <div className="rounded border">
+        <div className="overflow-x-auto rounded border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-36 pl-4">Recorded</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Hypothesis</TableHead>
-                <TableHead>Evidence</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead className="pr-4">Tag</TableHead>
               </TableRow>
             </TableHeader>
@@ -82,7 +82,8 @@ export function Updates() {
                     </a>
                   </TableCell>
                   <TableCell className="min-w-72 align-top whitespace-normal">
-                    <p>{e.claim}</p>
+                    <p className="text-xs text-muted-foreground">{evidenceKindLabel(e)}</p>
+                    <p className="mt-1">{e.claim}</p>
                     <div className="mt-1 text-xs text-muted-foreground [&_button]:text-xs [&_button]:text-muted-foreground"><SourceInspector evidence={e} /></div>
                   </TableCell>
                   <TableCell className="pr-4 align-top">

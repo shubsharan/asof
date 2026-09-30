@@ -4,6 +4,7 @@ import { useAsOf } from "./asof";
 import { companyHypothesisPath } from "./routes";
 import { CompanyAvatar, formatDate, VerdictBadge, withAsOf } from "./shared";
 import { usePortfolio } from "./usePortfolio";
+import { HistoryControls } from "./TimeScrubber";
 
 /** Company summaries lead to the research and sources behind each question. */
 export function Portfolio({ activeRuns }: { activeRuns: Run[] }) {
@@ -14,6 +15,7 @@ export function Portfolio({ activeRuns }: { activeRuns: Run[] }) {
     <div className="mb-8">
       <h1 className="text-2xl font-semibold">Company research</h1>
       <p className="mt-1 text-muted-foreground">Exa researches the questions you track. Explore the findings and the sources behind them.</p>
+      <HistoryControls />
     </div>
     {asOf && <p className="mb-4 text-sm">Research as of {formatDate(asOf)}. <button className="underline" onClick={() => setAsOf(undefined)}>Back to latest</button></p>}
     <div className="grid gap-6 lg:grid-cols-2">

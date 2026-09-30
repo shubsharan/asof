@@ -3,6 +3,7 @@
  * evidence supports, contradicts or is neutral, and so is an assessment's verdict on the body of evidence.
  */
 export type Direction = "supports" | "neutral" | "contradicts";
+export type ResearchRubric = { supportingSignals: string[]; challengingSignals: string[]; period: string };
 export type ReviewDecision = "relevant" | "irrelevant" | "disputed";
 
 export type EvidenceReview = {
@@ -33,6 +34,7 @@ export type Evidence = {
   hypothesisId: string;
   title: string;
   claim: string;
+  kind?: "lead" | "claim" | "legacy";
   url: string;
   /** When the source was published. Missing for undated pages. */
   publishedAt?: string;
@@ -44,6 +46,8 @@ export type Evidence = {
   source: "search" | "agent" | "monitor";
   /** Why the source was judged credible, when the screening step recorded it. */
   sourceReasoning?: string;
+  relevanceReason?: string;
+  grounding?: unknown;
   /** True for evidence that existed before the review workflow was introduced. */
   imported?: boolean;
   review?: EvidenceReview;
@@ -88,6 +92,15 @@ export type ResearchAssessment = Omit<HypothesisVersion, "id" | "confidence" | "
   confidence: number;
   /** The date field carried by a legacy row, without claiming what event it timed. */
   originalAsOf?: string;
+  previousAssessmentId?: number;
+  inputEvidenceIds?: string[];
+  consideredEvidenceIds?: string[];
+  providerRunId?: string;
+  rawOutput?: unknown;
+  grounding?: unknown;
+  hypothesisSnapshot?: { statement: string; rubric?: ResearchRubric };
+  changeReason?: string;
+  decisiveEvidenceIds?: string[];
 };
 
 export type ProposalStatus = "pending" | "accepted" | "dismissed";
@@ -111,7 +124,7 @@ export type AssessmentProposal = {
 };
 
 /** A hypothesis the whole portfolio is tracked on, e.g. "moat". */
-export type PortfolioHypothesis = { id: string; name: string; statement: string };
+export type PortfolioHypothesis = { id: string; name: string; statement: string; rubric?: ResearchRubric };
 
 /** One company's standing on a portfolio hypothesis. */
 export type Hypothesis = PortfolioHypothesis & {

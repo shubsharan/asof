@@ -1,14 +1,20 @@
 import type { Database } from "bun:sqlite";
 import { thesisAsOf } from "../domain/thesis";
 import { normalizeSourceUrl } from "../domain/source";
+import { rubricForHypothesis } from "../domain/rubric";
 import { getWatch } from "./watches";
 import type { AssessmentProposal, Company, Direction, Evidence, EvidenceReview, Hypothesis, HypothesisVersion, PortfolioHypothesis, ResearchAssessment, ReviewDecision, SourceRelationship, SourceVersion } from "../domain/types";
 
 /** Evidence as it arrives from a source, before AsOf assigns an id and timestamps. */
-export type NewEvidence = Pick<Evidence, "title" | "claim" | "url"> & Partial<Pick<Evidence, "publishedAt" | "type" | "sourceReasoning" | "excerpt">> & {
+export type NewEvidence = Pick<Evidence, "title" | "claim" | "url"> & Partial<Pick<Evidence, "publishedAt" | "type" | "sourceReasoning" | "excerpt" | "relevanceReason" | "kind">> & {
   contentText?: string;
   grounding?: unknown;
   sourceRelationship?: SourceRelationship;
+};
+
+export type NewClaim = Pick<Evidence, "title" | "claim" | "url" | "excerpt" | "type" | "relevanceReason"> & {
+  excerpt: string; type: Direction; relevanceReason: string;
+  publishedAt?: string; sourceReasoning?: string; sourceRelationship?: SourceRelationship; grounding?: unknown;
 };
 
 export type SourceCaptureInput =
@@ -21,12 +27,15 @@ type EvidenceRow = {
   hypothesis_id: string;
   title: string;
   claim: string;
+  kind: "lead" | "claim" | "legacy";
   url: string;
   published_at: string | null;
   discovered_at: string;
   type: Evidence["type"] | null;
   source: Evidence["source"];
   source_reasoning: string | null;
+  relevance_reason: string | null;
+  grounding: string | null;
   imported: number;
   source_version_id: string | null;
   excerpt: string | null;
@@ -56,6 +65,9 @@ type VersionRow = {
 type ResearchRow = {
   id: number; hypothesis_id: string; target_date: string | null; recorded_at: string | null; original_as_of: string | null; verdict: Direction;
   confidence: number; reasoning: string; evidence_ids: string; open_questions: string; origin: ResearchAssessment["origin"];
+  previous_assessment_id: number | null; input_evidence_ids: string | null; considered_evidence_ids: string | null;
+  provider_run_id: string | null; raw_output: string | null; grounding: string | null;
+  hypothesis_snapshot: string | null; change_reason: string | null; decisive_evidence_ids: string | null;
 };
 
 type ProposalRow = {
@@ -80,12 +92,15 @@ const toEvidence = (r: EvidenceRow, reviewRows: ReviewRow[] = [], sourceVersion?
   hypothesisId: r.hypothesis_id,
   title: r.title,
   claim: r.claim,
+  kind: r.kind,
   url: r.url,
   publishedAt: r.published_at ?? undefined,
   discoveredAt: r.discovered_at,
   type: r.type ?? undefined,
   source: r.source,
   sourceReasoning: r.source_reasoning ?? undefined,
+  relevanceReason: r.relevance_reason ?? undefined,
+  grounding: r.grounding ? JSON.parse(r.grounding) : undefined,
   imported: r.imported === 1,
   reviewHistory: reviewRows.map(toReview),
   review: reviewRows.at(-1) ? toReview(reviewRows.at(-1)!) : undefined,
@@ -115,6 +130,15 @@ const toResearch = (r: ResearchRow): ResearchAssessment => ({
   recordedAt: r.recorded_at ?? undefined, verdict: r.verdict, confidence: r.confidence, reasoning: r.reasoning,
   evidenceIds: JSON.parse(r.evidence_ids), openQuestions: JSON.parse(r.open_questions), origin: r.origin,
   originalAsOf: r.original_as_of ?? undefined,
+  previousAssessmentId: r.previous_assessment_id ?? undefined,
+  inputEvidenceIds: r.input_evidence_ids ? JSON.parse(r.input_evidence_ids) : undefined,
+  consideredEvidenceIds: r.considered_evidence_ids ? JSON.parse(r.considered_evidence_ids) : undefined,
+  providerRunId: r.provider_run_id ?? undefined,
+  rawOutput: r.raw_output ? JSON.parse(r.raw_output) : undefined,
+  grounding: r.grounding ? JSON.parse(r.grounding) : undefined,
+  hypothesisSnapshot: r.hypothesis_snapshot ? JSON.parse(r.hypothesis_snapshot) : undefined,
+  changeReason: r.change_reason ?? undefined,
+  decisiveEvidenceIds: r.decisive_evidence_ids ? JSON.parse(r.decisive_evidence_ids) : undefined,
 });
 
 const toProposal = (r: ProposalRow): AssessmentProposal => ({
@@ -127,12 +151,17 @@ const toProposal = (r: ProposalRow): AssessmentProposal => ({
 
 /** Adds a hypothesis to the portfolio. Every company is untested on it until assessed against evidence. */
 export function createHypothesis(db: Database, h: PortfolioHypothesis): void {
-  db.query("INSERT INTO hypotheses (id, name, statement) VALUES (?, ?, ?)").run(h.id, h.name, h.statement);
+  db.query("INSERT INTO hypotheses (id, name, statement, rubric) VALUES (?, ?, ?, ?)").run(
+    h.id, h.name, h.statement, JSON.stringify(h.rubric ?? rubricForHypothesis(h.id) ?? null),
+  );
 }
 
 /** The portfolio's hypotheses, in the order they were added. */
 export function listHypotheses(db: Database): PortfolioHypothesis[] {
-  return db.query<PortfolioHypothesis, []>("SELECT id, name, statement FROM hypotheses ORDER BY rowid").all();
+  return db.query<{ id: string; name: string; statement: string; rubric: string | null }, []>(
+    "SELECT id, name, statement, rubric FROM hypotheses ORDER BY rowid",
+  ).all().map((h) => ({ id: h.id, name: h.name, statement: h.statement,
+    rubric: h.rubric ? JSON.parse(h.rubric) : rubricForHypothesis(h.id) }));
 }
 
 /**
@@ -151,9 +180,9 @@ export function recordEvidence(
 ): Evidence[] {
   const insert = db.query<EvidenceRow, Record<string, string | null>>(
     `INSERT INTO evidence (id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning, imported,
-       source_version_id, excerpt, verification_gap, relationship, relationship_automated, observation_hash)
+       source_version_id, excerpt, verification_gap, relationship, relationship_automated, observation_hash, kind, relevance_reason, grounding)
      VALUES ($id, $companyId, $hypothesisId, $title, $claim, $url, $publishedAt, $now, $type, $source, $sourceReasoning, 0,
-       $sourceVersionId, $excerpt, $verificationGap, $relationship, 1, $observationHash)
+       $sourceVersionId, $excerpt, $verificationGap, $relationship, 1, $observationHash, 'lead', $relevanceReason, $grounding)
      ON CONFLICT (company_id, hypothesis_id, observation_hash) DO NOTHING
      RETURNING *`,
   );
@@ -177,6 +206,8 @@ export function recordEvidence(
         type: item.type ?? null,
         source,
         sourceReasoning: item.sourceReasoning ?? null,
+        relevanceReason: item.relevanceReason ?? null,
+        grounding: item.grounding === undefined ? null : JSON.stringify(item.grounding),
         sourceVersionId: version?.id ?? null,
         excerpt: capture?.status === "retrieved" ? capture.excerpt ?? item.excerpt ?? null : item.excerpt ?? null,
         verificationGap: capture?.status === "unavailable" ? capture.error : capture ? null : "Source content was not captured",
@@ -186,6 +217,78 @@ export function recordEvidence(
       return row ? [toEvidence(row, [], version)] : [];
     }),
   )();
+}
+
+const normalizePassage = (value: string) => value.replace(/\s+/g, " ").trim();
+
+/** A source version gets one complete, immutable claim batch for a company and hypothesis. */
+export function recordClaimBatch(
+  db: Database,
+  companyId: string,
+  hypothesisId: string,
+  items: NewClaim[],
+  source: Evidence["source"],
+  now = new Date().toISOString(),
+  captures: Map<string, SourceCaptureInput> = new Map(),
+): { claims: Evidence[]; added: Evidence[] } {
+  if (!items.length) return { claims: [], added: [] };
+  return db.transaction(() => {
+    const groups = new Map<string, { version: SourceVersion; items: NewClaim[] }>();
+    for (const item of items) {
+      const capture = captures.get(item.url);
+      if (!capture || capture.status !== "retrieved" || !normalizePassage(capture.text)
+        || normalizeSourceUrl(capture.url) !== normalizeSourceUrl(item.url)) {
+        throw new Error("Claim needs captured full source text for its URL");
+      }
+      const version = storeSourceVersion(db, capture);
+      const group = groups.get(version.id);
+      if (group) group.items.push(item);
+      else groups.set(version.id, { version, items: [item] });
+    }
+    const claims: Evidence[] = [];
+    const added: Evidence[] = [];
+    for (const { version, items: batch } of groups.values()) {
+      const existing = db.query<EvidenceRow, [string, string, string]>(
+        "SELECT * FROM evidence WHERE company_id = ? AND hypothesis_id = ? AND source_version_id = ? AND kind = 'claim' ORDER BY rowid",
+      ).all(companyId, hypothesisId, version.id);
+      if (existing.length) {
+        claims.push(...existing.map((row) => getEvidence(db, row.id)!));
+        continue;
+      }
+      const seen = new Set<string>();
+      for (const item of batch) {
+        const claim = normalizePassage(item.claim);
+        const excerpt = normalizePassage(item.excerpt);
+        if (!item.title.trim() || !claim || !excerpt || !item.relevanceReason.trim()
+          || !["supports", "neutral", "contradicts"].includes(item.type)) {
+          throw new Error("Claim needs title, direction, claim, excerpt, and relevance reason");
+        }
+        if (!normalizePassage(version.text ?? "").includes(excerpt)) throw new Error("Claim excerpt is absent from saved source text");
+        const identity = `${claim}\0${excerpt}`;
+        if (seen.has(identity)) throw new Error("Duplicate claim in source batch");
+        seen.add(identity);
+        const row = db.query<EvidenceRow, Record<string, string | null>>(`INSERT INTO evidence
+          (id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source,
+           source_reasoning, relevance_reason, grounding, imported, source_version_id, excerpt, relationship,
+           relationship_automated, observation_hash, kind)
+          VALUES ($id, $companyId, $hypothesisId, $title, $claim, $url, $publishedAt, $now, $type, $source,
+           $sourceReasoning, $relevanceReason, $grounding, 0, $sourceVersionId, $excerpt, $relationship,
+           1, $observationHash, 'claim') RETURNING *`).get({
+          id: crypto.randomUUID(), companyId, hypothesisId, title: item.title, claim: item.claim,
+          url: item.url, publishedAt: item.publishedAt ?? null, now, type: item.type, source,
+          sourceReasoning: item.sourceReasoning ?? null, relevanceReason: item.relevanceReason,
+          grounding: item.grounding === undefined ? null : JSON.stringify(item.grounding),
+          sourceVersionId: version.id, excerpt: item.excerpt,
+          relationship: item.sourceRelationship ?? "unknown",
+          observationHash: hash([normalizeSourceUrl(item.url), version.id, identity].join("\0")),
+        })!;
+        const evidence = toEvidence(row, [], version);
+        claims.push(evidence);
+        added.push(evidence);
+      }
+    }
+    return { claims, added };
+  })();
 }
 
 export function resolveEvidenceObservation(
@@ -352,13 +455,64 @@ export function recordResearchAssessment(
   hypothesisId: string,
   input: Omit<ResearchAssessment, "id" | "asOf">,
 ): ResearchAssessment {
+  const hasProvenance = input.previousAssessmentId !== undefined || input.inputEvidenceIds !== undefined
+    || input.consideredEvidenceIds !== undefined || input.providerRunId !== undefined
+    || input.rawOutput !== undefined || input.grounding !== undefined || input.hypothesisSnapshot !== undefined
+    || input.changeReason !== undefined || input.decisiveEvidenceIds !== undefined;
+  if (hasProvenance) {
+    if (!isStringArray(input.inputEvidenceIds) || !isStringArray(input.consideredEvidenceIds)
+      || !isStringArray(input.decisiveEvidenceIds) || !isStringArray(input.evidenceIds)
+      || typeof input.providerRunId !== "string" || !input.providerRunId.trim()
+      || typeof input.hypothesisSnapshot?.statement !== "string" || !input.hypothesisSnapshot.statement.trim()
+      || typeof input.changeReason !== "string" || !input.changeReason.trim()
+      || input.rawOutput === undefined) throw new Error("Research assessment needs complete provenance");
+    validateEvidence(db, companyId, hypothesisId, input.inputEvidenceIds, true);
+    validateEvidence(db, companyId, hypothesisId, input.consideredEvidenceIds, true);
+    const considered = new Set(input.consideredEvidenceIds);
+    const cited = new Set(input.evidenceIds);
+    if (input.evidenceIds.some((id) => !considered.has(id))) throw new Error("Cited evidence must be considered");
+    if (input.decisiveEvidenceIds.some((id) => !cited.has(id))) throw new Error("Decisive evidence must be cited");
+    if (input.origin === "reconstruction" && !input.targetDate) throw new Error("Reconstruction needs a target date");
+    const latest = input.origin === "reconstruction"
+      ? db.query<{ id: number }, [string, string, string]>(`SELECT id FROM research_assessments
+          WHERE company_id = ? AND hypothesis_id = ? AND origin = 'reconstruction' AND target_date <= ?
+          ORDER BY target_date DESC, recorded_at DESC, id DESC LIMIT 1`).get(companyId, hypothesisId, input.targetDate!)
+      : db.query<{ id: number }, [string, string]>(`SELECT id FROM research_assessments
+          WHERE company_id = ? AND hypothesis_id = ? AND origin = 'agent'
+          ORDER BY recorded_at DESC, id DESC LIMIT 1`).get(companyId, hypothesisId);
+    if ((input.previousAssessmentId ?? null) !== (latest?.id ?? null)) {
+      throw new Error("Previous research assessment is stale or belongs to another target");
+    }
+    const citedRows = db.query<Pick<EvidenceRow, "id" | "kind" | "excerpt"> & { status: string | null; text: string | null }, [string]>(`
+      SELECT e.id, e.kind, e.excerpt, s.status, s.text FROM evidence e
+      LEFT JOIN source_versions s ON s.id = e.source_version_id
+      WHERE e.id IN (SELECT value FROM json_each(?))`,
+    ).all(JSON.stringify(input.evidenceIds));
+    if (citedRows.some((row) => row.kind !== "claim" || row.status !== "retrieved"
+      || !row.excerpt || !row.text || !normalizePassage(row.text).includes(normalizePassage(row.excerpt)))) {
+      throw new Error("Research citations need saved source passages");
+    }
+  }
   validateEvidence(db, companyId, hypothesisId, input.evidenceIds);
   const row = db.query<ResearchRow, Record<string, string | number | null>>(`INSERT INTO research_assessments
-    (company_id, hypothesis_id, target_date, recorded_at, verdict, confidence, reasoning, evidence_ids, open_questions, origin)
-    VALUES ($companyId, $hypothesisId, $targetDate, $recordedAt, $verdict, $confidence, $reasoning, $evidenceIds, $openQuestions, $origin)
+    (company_id, hypothesis_id, target_date, recorded_at, verdict, confidence, reasoning, evidence_ids, open_questions, origin,
+     previous_assessment_id, input_evidence_ids, considered_evidence_ids, provider_run_id, raw_output, grounding,
+     hypothesis_snapshot, change_reason, decisive_evidence_ids)
+    VALUES ($companyId, $hypothesisId, $targetDate, $recordedAt, $verdict, $confidence, $reasoning, $evidenceIds, $openQuestions, $origin,
+      $previousAssessmentId, $inputEvidenceIds, $consideredEvidenceIds, $providerRunId, $rawOutput, $grounding,
+      $hypothesisSnapshot, $changeReason, $decisiveEvidenceIds)
     RETURNING *`).get({ companyId, hypothesisId, targetDate: input.targetDate ?? null, recordedAt: input.recordedAt ?? null,
     verdict: input.verdict, confidence: input.confidence, reasoning: input.reasoning, evidenceIds: JSON.stringify(input.evidenceIds),
-    openQuestions: JSON.stringify(input.openQuestions), origin: input.origin })!;
+    openQuestions: JSON.stringify(input.openQuestions), origin: input.origin,
+    previousAssessmentId: input.previousAssessmentId ?? null,
+    inputEvidenceIds: input.inputEvidenceIds === undefined ? null : JSON.stringify(input.inputEvidenceIds),
+    consideredEvidenceIds: input.consideredEvidenceIds === undefined ? null : JSON.stringify(input.consideredEvidenceIds),
+    providerRunId: input.providerRunId ?? null, rawOutput: input.rawOutput === undefined ? null : JSON.stringify(input.rawOutput),
+    grounding: input.grounding === undefined ? null : JSON.stringify(input.grounding),
+    hypothesisSnapshot: input.hypothesisSnapshot === undefined ? null : JSON.stringify(input.hypothesisSnapshot),
+    changeReason: input.changeReason ?? null,
+    decisiveEvidenceIds: input.decisiveEvidenceIds === undefined ? null : JSON.stringify(input.decisiveEvidenceIds),
+  })!;
   return toResearch(row);
 }
 
@@ -446,8 +600,8 @@ function getEvidence(db: Database, id: string): Evidence | undefined {
   return toEvidence(row, reviews, source ? toSourceVersion(source) : undefined);
 }
 
-/** The company with full history and evidence, as it looked on `asOf` (default: now). */
-export function getCompany(db: Database, id: string, asOf = new Date().toISOString()): Company | undefined {
+/** Complete recorded data before any as-of projection. */
+export function getCompanyData(db: Database, id: string): Company | undefined {
   const row = db
     .query<{ id: string; name: string; description: string; domain: string; runtime_monitor_id: string | null }, [string]>(
       `SELECT c.id, c.name, c.description, c.domain, w.monitor_id runtime_monitor_id
@@ -493,7 +647,18 @@ export function getCompany(db: Database, id: string, asOf = new Date().toISOStri
       }),
     ),
   };
-  return thesisAsOf(full, asOf);
+  return full;
+}
+
+/** The company with full history and evidence, as it looked on `asOf` (default: now). */
+export function getCompany(db: Database, id: string, asOf = new Date().toISOString()): Company | undefined {
+  const company = getCompanyData(db, id);
+  return company ? thesisAsOf(company, asOf) : undefined;
+}
+
+export function listCompaniesData(db: Database): Company[] {
+  return db.query<{ id: string }, []>("SELECT id FROM companies ORDER BY rowid").all()
+    .map((c) => getCompanyData(db, c.id)!);
 }
 
 /** Every company as it looked on `asOf`, via `getCompany`, so cross-company views share its as-of rules. */

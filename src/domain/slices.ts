@@ -1,6 +1,7 @@
 import type { Direction, Evidence, HypothesisVersion } from "./types";
 import { day } from "./timeline";
 import { knownAt } from "./thesis";
+import type { HistoryMode } from "./research";
 
 // One slice per assessment day. Inside a slice every row has a marker (its assessment as of that day,
 // fresh if made that day, carried if older) and the evidence that became knowable since the previous
@@ -13,6 +14,7 @@ export type SliceRow = {
   href?: string;
   history: HypothesisVersion[];
   evidence: Evidence[];
+  mode?: HistoryMode;
 };
 
 /** A row's assessment as it stood on a slice day. */
@@ -24,6 +26,7 @@ export type Marker = {
   /** Assessed on this slice day (true) or carried forward from an earlier day (false). */
   fresh: boolean;
   asOf: string;
+  assessmentId?: number;
 };
 
 export type StackKey = Direction | "unclassified";
@@ -53,16 +56,19 @@ function markerFor(history: HypothesisVersion[], d: string): Marker | undefined 
   const fresh = sorted.findLast((v) => day(v.asOf) === d);
   const v = fresh ?? sorted.findLast((v) => day(v.asOf) < d);
   if (!v || v.confidence === undefined) return undefined;
-  return { lean: lean({ verdict: v.verdict, confidence: v.confidence }), confidence: v.confidence, verdict: v.verdict, fresh: v === fresh, asOf: v.asOf };
+  return { lean: lean({ verdict: v.verdict, confidence: v.confidence }), confidence: v.confidence, verdict: v.verdict, fresh: v === fresh, asOf: v.asOf, ...(v.id === undefined ? {} : { assessmentId: v.id }) };
 }
 
-function stackFor(evidence: Evidence[], from: string | undefined, to: string): EvidenceStack {
+function stackFor(evidence: Evidence[], from: string | undefined, to: string, mode: HistoryMode = "recorded"): EvidenceStack {
+  const at = (e: Evidence) => mode === "recorded" ? knownAt(e) : e.publishedAt;
   const inWindow = evidence
     .filter((e) => {
-      const k = day(knownAt(e));
+      const date = at(e);
+      if (!date) return false;
+      const k = day(date);
       return k <= to && (from === undefined || k > from);
     })
-    .toSorted((a, b) => knownAt(a).localeCompare(knownAt(b)));
+    .toSorted((a, b) => (at(a) ?? "").localeCompare(at(b) ?? ""));
   const stack = Object.fromEntries(STACK_KEYS.map((k) => [k, { shown: [], overflow: 0 }])) as unknown as EvidenceStack;
   for (const e of inWindow) {
     const group = stack[e.type ?? "unclassified"];
@@ -76,7 +82,7 @@ function stackFor(evidence: Evidence[], from: string | undefined, to: string): E
 export function buildSlices(rows: SliceRow[], days: string[]): Slice[] {
   return days.map((d, i) => ({
     day: d,
-    cells: rows.map((r) => ({ rowId: r.id, marker: markerFor(r.history, d), evidence: stackFor(r.evidence, days[i - 1], d) })),
+    cells: rows.map((r) => ({ rowId: r.id, marker: markerFor(r.history, d), evidence: stackFor(r.evidence, days[i - 1], d, r.mode) })),
   }));
 }
 

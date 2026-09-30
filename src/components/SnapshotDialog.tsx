@@ -4,7 +4,7 @@ import { compareText, type TextChange, type TextComparison } from "@/domain/text
 import type { SnapshotCapture } from "@/exa/snapshot";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { api, formatDate, formatDateTime } from "./shared";
+import { api, evidenceKindLabel, formatDate, formatDateTime } from "./shared";
 
 type SnapshotResult = { now: SnapshotCapture; then?: SnapshotCapture };
 type RetrievedCapture = Extract<SnapshotCapture, { status: "retrieved" }>;
@@ -27,8 +27,8 @@ export function SourceInspector({ evidence, asOf }: { evidence: Evidence; asOf?:
   const requestId = useRef(0);
   const pending = useRef(false);
   const saved = savedCapture(evidence.sourceVersion);
-  const excerpt = evidence.excerpt ?? evidence.sourceVersion?.excerpt;
-  const preview = excerpt ?? (saved ? textPreview(saved.text) : undefined);
+  const passage = evidence.kind === "claim" ? evidence.excerpt : undefined;
+  const preview = evidence.kind === "legacy" || !evidence.kind ? (saved ? textPreview(saved.text) : undefined) : undefined;
 
   useEffect(() => {
     requestId.current++;
@@ -83,12 +83,24 @@ export function SourceInspector({ evidence, asOf }: { evidence: Evidence; asOf?:
           <DialogDescription className="break-all">{hostOf(evidence.url)}</DialogDescription>
         </DialogHeader>
 
-        {preview ? (
+        <section className="text-sm">
+          <p className="text-xs text-muted-foreground">{evidenceKindLabel(evidence)}</p>
+          <p className="mt-2">{evidence.claim}</p>
+          {evidence.kind !== "claim" && evidence.relevanceReason && <p className="mt-2 text-muted-foreground">Why it matters: {evidence.relevanceReason}</p>}
+        </section>
+
+        {passage ? (
           <section>
-            <p className="mb-2 text-xs text-muted-foreground">{excerpt ? "Saved excerpt" : "Saved text preview"}{evidence.sourceVersion?.retrievedAt ? ` · ${formatDate(evidence.sourceVersion.retrievedAt)}` : ""}</p>
-            <blockquote className="border-l-2 pl-3 text-sm leading-relaxed">{preview}</blockquote>
+            <p className="mb-2 text-xs text-muted-foreground">Exact saved passage{evidence.sourceVersion?.retrievedAt ? ` · retrieved ${formatDateTime(evidence.sourceVersion.retrievedAt)}` : ""}</p>
+            <blockquote className="border-l-2 pl-3 text-sm leading-relaxed">{passage}</blockquote>
+            {evidence.relevanceReason && <p className="mt-2 text-sm text-muted-foreground">Why it matters: {evidence.relevanceReason}</p>}
           </section>
-        ) : <p className="text-sm text-muted-foreground">Saved page content is unavailable for this source.</p>}
+        ) : preview ? (
+          <section>
+            <p className="mb-2 text-xs text-muted-foreground">Saved page text preview{evidence.sourceVersion?.retrievedAt ? ` · retrieved ${formatDateTime(evidence.sourceVersion.retrievedAt)}` : ""}. This is not a matched passage.</p>
+            <p className="border-l-2 pl-3 text-sm leading-relaxed">{preview}</p>
+          </section>
+        ) : <p className="text-sm text-muted-foreground">{evidence.kind === "lead" ? "No passage has been matched to this lead." : evidence.kind === "claim" ? "The matched passage is unavailable in this record." : "Saved page content is unavailable for this source."}</p>}
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild><a href={evidence.url} target="_blank" rel="noreferrer">Open original</a></Button>

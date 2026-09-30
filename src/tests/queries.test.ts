@@ -77,7 +77,8 @@ test("every company is tracked on every portfolio hypothesis, with its own evide
   expect(b).toBeDefined();
   expect(() => saveAssessment(db, { companyId: "acme", hypothesisId: "adoption", verdict: "supports", reasoning: "Reason", evidenceIds: [b!.id], reviewedEvidenceIds: [b!.id], openQuestions: [] })).toThrow(/not recorded/);
 
-  expect(listHypotheses(db)).toEqual([{ id: "adoption", name: "Adoption", statement: "Enterprise adoption is accelerating" }]);
+  expect(listHypotheses(db)).toMatchObject([{ id: "adoption", name: "Adoption", statement: "Enterprise adoption is accelerating",
+    rubric: { period: expect.any(String), supportingSignals: expect.any(Array), challengingSignals: expect.any(Array) } }]);
   const beta = getCompany(db, "beta")!.hypotheses;
   expect(beta.map((h) => [h.id, h.verdict, h.evidence.map((e) => e.type)])).toEqual([["adoption", "untested", ["contradicts"]]]);
 });

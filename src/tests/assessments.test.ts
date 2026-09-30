@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createProposal, createHypothesis, getCompany, listProposals, recordEvidence, reviewEvidence, saveAssessment } from "../db/queries";
+import { createProposal, createHypothesis, getCompany, listProposals, recordClaimBatch, reviewEvidence, saveAssessment } from "../db/queries";
 import { createDb } from "../db/schema";
 import { loadHypothesis, loadResearchHypothesis, runAssess } from "../research";
 
@@ -7,9 +7,9 @@ function setup() {
   const db = createDb(":memory:");
   db.run("INSERT INTO companies (id, name, description, domain) VALUES ('acme', 'Acme', '', 'acme.example')");
   createHypothesis(db, { id: "moat", name: "Moat", statement: "Moat is strengthening" });
-  const evidence = recordEvidence(db, "acme", "moat", [
-    { title: "Source", claim: "Claim", url: "https://example.com/source", type: "supports", publishedAt: "2026-09-27" },
-  ], "agent", "2026-09-28T12:00:00Z")[0]!;
+  const evidence = recordClaimBatch(db, "acme", "moat", [
+    { title: "Source", claim: "Claim", excerpt: "Claim", relevanceReason: "Tests moat", url: "https://example.com/source", type: "supports", publishedAt: "2026-09-27" },
+  ], "agent", "2026-09-28T12:00:00Z", new Map([["https://example.com/source", { status: "retrieved", url: "https://example.com/source", text: "Claim", retrievedAt: "2026-09-28T12:00:00Z" }]])).claims[0]!;
   reviewEvidence(db, evidence.id, { decision: "relevant" }, "2026-09-28T12:00:30Z");
   return { db, evidence };
 }
@@ -65,24 +65,24 @@ test("assessment input rejects malformed arrays and blank reasoning", () => {
   expect(() => saveAssessment(db, null as never)).toThrow(/company and hypothesis/);
 });
 
-const evaluated = async () => ({
+const evaluated = (evidenceId: string) => async () => ({
   evaluation: {
     verdict: "supports" as const, confidence: 77, reasoning: "Provider reasoning", openQuestions: [],
-    citedUrls: ["https://example.com/source"], newEvidence: [],
+    changeReason: "Initial recorded assessment", consideredEvidenceIds: [evidenceId], citedEvidenceIds: [evidenceId], decisiveEvidenceIds: [evidenceId], newClaims: [],
   },
   providerRunId: "fixture-run", rawOutput: { structured: { verdict: "supports" } }, grounding: [{ field: "verdict", citations: [] }],
 });
 
 test("Assess saves AI research directly without accepting an analyst assessment", async () => {
-  const { db } = setup();
+  const { db, evidence } = setup();
   const current = loadHypothesis(db, "acme", "moat")!;
-  const created = await runAssess(db, current.company, current.hypothesis, undefined, evaluated);
+  const created = await runAssess(db, current.company, current.hypothesis, undefined, evaluated(evidence.id));
   expect(created).toMatchObject({ origin: "agent", verdict: "supports" });
   expect(listProposals(db)).toHaveLength(0);
   expect(getCompany(db, "acme")!.hypotheses[0]).toMatchObject({ verdict: "untested", history: [] });
 
   const historical = loadResearchHypothesis(db, "acme", "moat", "2026-09-28")!;
-  const reconstructed = await runAssess(db, historical.company, historical.hypothesis, "2026-09-28", evaluated);
+  const reconstructed = await runAssess(db, historical.company, historical.hypothesis, "2026-09-28", evaluated(evidence.id));
   expect(reconstructed).toMatchObject({ origin: "reconstruction", targetDate: "2026-09-28" });
   const hypothesis = getCompany(db, "acme")!.hypotheses[0]!;
   expect(hypothesis.history).toEqual([]);

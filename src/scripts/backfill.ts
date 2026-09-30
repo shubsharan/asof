@@ -12,7 +12,11 @@ const args = process.argv.slice(2);
 const reset = args.includes("--reset");
 if (reset) args.splice(args.indexOf("--reset"), 1);
 const datesFlag = args.indexOf("--dates");
-const dates = datesFlag >= 0 ? args.splice(datesFlag, 2)[1]!.split(",") : DEFAULT_DATES;
+const dates = datesFlag >= 0 ? (args.splice(datesFlag, 2)[1] ?? "").split(",") : DEFAULT_DATES;
+if (dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) {
+  throw new Error("Backfill dates must be valid YYYY-MM-DD dates");
+}
+const orderedDates = [...new Set(dates)].sort();
 const [companyId, ...only] = args;
 if (!companyId) throw new Error("Usage: bun run backfill <companyId> [hypothesisId...] [--dates d1,d2] [--reset]");
 
@@ -28,7 +32,7 @@ if (reset) {
 }
 
 for (const id of ids) {
-  for (const date of dates) {
+  for (const date of orderedDates) {
     const before = loadResearchHypothesis(db, companyId, id, date)!;
     const found = await runResearch(db, before.company, before.hypothesis, date);
     const t = loadResearchHypothesis(db, companyId, id, date)!;

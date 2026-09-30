@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createHypothesis, getCompany, groupEvidence, recordEvidence, reviewEvidence, saveAssessment, setEvidenceRelationship, type SourceCaptureInput } from "../db/queries";
+import { createHypothesis, getCompany, groupEvidence, recordClaimBatch, recordEvidence, reviewEvidence, saveAssessment, setEvidenceRelationship, type SourceCaptureInput } from "../db/queries";
 import { createDb } from "../db/schema";
 import { loadHypothesis, runAssess } from "../research";
 
@@ -83,9 +83,9 @@ test("Assess reports only evidence it added, excluding an arrival during generat
   const agentUrl = "https://agent-new";
   const result = await runAssess(db, loaded.company, loaded.hypothesis, undefined, async () => {
     recordEvidence(db, "acme", "moat", [{ title: "Concurrent", claim: "other job", url: "https://concurrent" }], "monitor");
-    return { evaluation: { verdict: "supports", confidence: 70, reasoning: "Reason", openQuestions: [], citedUrls: [agentUrl],
-      newEvidence: [{ title: "Agent", claim: "agent job", url: agentUrl, type: "supports" }] },
-      providerRunId: "fixture", rawOutput: {}, grounding: [{ field: "evidence", citations: [{ url: agentUrl }] }] };
+    return { evaluation: { verdict: "supports", confidence: 70, reasoning: "Reason", changeReason: "Initial recorded assessment", openQuestions: [], consideredEvidenceIds: ["new"], citedEvidenceIds: ["new"], decisiveEvidenceIds: ["new"],
+      newClaims: [{ ref: "new", title: "Agent", claim: "agent job", excerpt: "Agent page", relevanceReason: "Tests moat", url: agentUrl, type: "supports" }] },
+      providerRunId: "fixture", rawOutput: {}, grounding: [{ field: "newClaims[0]", citations: [{ url: agentUrl }] }] };
   }, async (urls) => new Map(urls.map((url) => [url, capture(url, "Agent page")])));
   expect(result.addedEvidenceIds).toHaveLength(1);
   expect(getCompany(db, "acme")!.hypotheses[0]!.evidence).toHaveLength(2);
@@ -94,22 +94,22 @@ test("Assess reports only evidence it added, excluding an arrival during generat
 test("Assess resolves rediscovered URLs to the exact captured source version", async () => {
   const db = setup();
   const url = "https://example.com/changing";
-  const old = recordEvidence(db, "acme", "moat", [{ title: "Page", claim: "Old wording", url }], "search", undefined,
-    new Map([[url, capture(url, "Version one")]]))[0]!;
+  const old = recordClaimBatch(db, "acme", "moat", [{ title: "Page", claim: "Old wording", excerpt: "Version one", relevanceReason: "Tests moat", type: "supports", url }], "search", undefined,
+    new Map([[url, capture(url, "Version one")]])).claims[0]!;
   reviewEvidence(db, old.id, { decision: "relevant" });
 
-  const evaluate = (claim: string) => async () => ({ evaluation: { verdict: "supports" as const, confidence: 70, reasoning: "Reason",
-    openQuestions: [], citedUrls: [url], newEvidence: [{ title: "Page", claim, url, type: "supports" as const }] },
-    providerRunId: crypto.randomUUID(), rawOutput: {}, grounding: [{ field: "evidence", citations: [{ url }] }] });
+  const evaluate = (claim: string, excerpt: string) => async () => ({ evaluation: { verdict: "supports" as const, confidence: 70, reasoning: "Reason", changeReason: "Updated", openQuestions: [],
+    consideredEvidenceIds: ["new"], citedEvidenceIds: ["new"], decisiveEvidenceIds: ["new"], newClaims: [{ ref: "new", title: "Page", claim, excerpt, relevanceReason: "Tests moat", url, type: "supports" as const }] },
+    providerRunId: crypto.randomUUID(), rawOutput: {}, grounding: [{ field: "newClaims[0]", citations: [{ url }] }] });
 
   const first = loadHypothesis(db, "acme", "moat")!;
-  const unchanged = await runAssess(db, first.company, first.hypothesis, undefined, evaluate("Reworded by model"),
+  const unchanged = await runAssess(db, first.company, first.hypothesis, undefined, evaluate("Old wording", "Version one"),
     async () => new Map([[url, capture(url, "Version one")]]));
   expect(unchanged.evidenceIds).toEqual([old.id]);
   expect(unchanged.addedEvidenceIds).toEqual([]);
 
   const next = loadHypothesis(db, "acme", "moat")!;
-  const changed = await runAssess(db, next.company, next.hypothesis, undefined, evaluate("Updated fact"),
+  const changed = await runAssess(db, next.company, next.hypothesis, undefined, evaluate("Updated fact", "Version two"),
     async () => new Map([[url, capture(url, "Version two")]]));
   expect(changed.evidenceIds).toHaveLength(1);
   expect(changed.evidenceIds[0]).not.toBe(old.id);

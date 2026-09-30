@@ -3,6 +3,7 @@ import type { AgentMonitor, AgentMonitorChange, CreateAgentMonitorParams } from 
 import type { NewEvidence } from "../db/queries";
 import type { Company } from "../domain/types";
 import { exa } from "./client";
+import { rubricText } from "../domain/rubric";
 
 const betas = [AGENT_MONITORS_BETA_HEADER];
 
@@ -35,7 +36,7 @@ export function monitorPayload(company: Company): CreateAgentMonitorParams {
     entities: [{ name: company.name, domain: company.domain, description: company.description }],
     fields: company.hypotheses.map((h) => ({
       name: h.id,
-      description: `New developments bearing on the investment hypothesis "${h.statement}", for or against it: the specific fact reported (numbers, names, dates), from credible sources.`,
+      description: `New leads bearing on the investment hypothesis "${h.statement}". ${rubricText(h)} Include supporting and challenging developments from credible sources. Report specific facts (numbers, names, dates); these are leads until their source passages are checked.`,
     })),
   };
 }

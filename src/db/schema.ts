@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { rubricForHypothesis } from "../domain/rubric";
 
 /** Generated at runtime (by `bun run seed` and the app); gitignored. */
 export const DB_PATH = process.env.ASOF_DB_PATH ?? "data/asof.sqlite";
@@ -12,12 +13,15 @@ CREATE TABLE IF NOT EXISTS evidence (
   hypothesis_id          TEXT NOT NULL REFERENCES hypotheses(id),
   title                  TEXT NOT NULL,
   claim                  TEXT NOT NULL,
+  kind                   TEXT NOT NULL DEFAULT 'lead' CHECK (kind IN ('lead', 'claim', 'legacy')),
   url                    TEXT NOT NULL,
   published_at           TEXT,
   discovered_at          TEXT NOT NULL,
   type                   TEXT CHECK (type IN ('supports', 'neutral', 'contradicts')),
   source                 TEXT NOT NULL CHECK (source IN ('search', 'agent', 'monitor')),
   source_reasoning       TEXT,
+  relevance_reason       TEXT,
+  grounding              TEXT,
   imported               INTEGER NOT NULL DEFAULT 0,
   source_version_id      TEXT REFERENCES source_versions(id),
   excerpt                TEXT,
@@ -52,7 +56,8 @@ CREATE TABLE IF NOT EXISTS companies (
 CREATE TABLE IF NOT EXISTS hypotheses (
   id        TEXT PRIMARY KEY, -- e.g. "moat"
   name      TEXT NOT NULL,    -- e.g. "Moat"
-  statement TEXT NOT NULL
+  statement TEXT NOT NULL,
+  rubric    TEXT
 );
 
 -- Supports / neutral / contradicts: the same words evidence is tagged with.
@@ -84,7 +89,16 @@ CREATE TABLE IF NOT EXISTS research_assessments (
   reasoning      TEXT NOT NULL,
   evidence_ids   TEXT NOT NULL,
   open_questions TEXT NOT NULL DEFAULT '[]',
-  origin         TEXT NOT NULL CHECK (origin IN ('legacy', 'reconstruction', 'agent'))
+  origin         TEXT NOT NULL CHECK (origin IN ('legacy', 'reconstruction', 'agent')),
+  previous_assessment_id INTEGER REFERENCES research_assessments(id),
+  input_evidence_ids TEXT,
+  considered_evidence_ids TEXT,
+  provider_run_id TEXT,
+  raw_output TEXT,
+  grounding TEXT,
+  hypothesis_snapshot TEXT,
+  change_reason TEXT,
+  decisive_evidence_ids TEXT
 );
 CREATE INDEX IF NOT EXISTS research_assessments_by_target ON research_assessments (company_id, hypothesis_id, target_date);
 
@@ -171,7 +185,7 @@ CREATE TABLE IF NOT EXISTS company_watches (
 );
 `;
 
-const VERSION = 6;
+const VERSION = 7;
 
 export function createDb(path = DB_PATH): Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -208,11 +222,36 @@ export function migrate(db: Database): void {
       if (version < 4) migrateReviews(db);
       if (version < 5) migrateSources(db);
       if (version < 6) migrateWatches(db);
+      if (version < 7) migrateResearchHandoff(db);
       db.run(`PRAGMA user_version = ${VERSION}`);
     })();
   } finally {
     db.run(`PRAGMA foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
   }
+}
+
+function migrateResearchHandoff(db: Database): void {
+  if (!columnsOf(db, "hypotheses").includes("rubric")) db.run("ALTER TABLE hypotheses ADD COLUMN rubric TEXT");
+  for (const row of db.query<{ id: string }, []>("SELECT id FROM hypotheses WHERE rubric IS NULL").all()) {
+    const rubric = rubricForHypothesis(row.id);
+    if (rubric) db.query("UPDATE hypotheses SET rubric = ? WHERE id = ?").run(JSON.stringify(rubric), row.id);
+  }
+  if (!columnsOf(db, "evidence").includes("kind")) db.run("ALTER TABLE evidence ADD COLUMN kind TEXT NOT NULL DEFAULT 'legacy' CHECK (kind IN ('lead', 'claim', 'legacy'))");
+  if (!columnsOf(db, "evidence").includes("relevance_reason")) db.run("ALTER TABLE evidence ADD COLUMN relevance_reason TEXT");
+  if (!columnsOf(db, "evidence").includes("grounding")) db.run("ALTER TABLE evidence ADD COLUMN grounding TEXT");
+  const researchColumns = [
+    ["previous_assessment_id", "INTEGER REFERENCES research_assessments(id)"],
+    ["input_evidence_ids", "TEXT"],
+    ["considered_evidence_ids", "TEXT"],
+    ["provider_run_id", "TEXT"],
+    ["raw_output", "TEXT"],
+    ["grounding", "TEXT"],
+    ["hypothesis_snapshot", "TEXT"],
+    ["change_reason", "TEXT"],
+    ["decisive_evidence_ids", "TEXT"],
+  ] as const;
+  const existing = columnsOf(db, "research_assessments");
+  for (const [name, type] of researchColumns) if (!existing.includes(name)) db.run(`ALTER TABLE research_assessments ADD COLUMN ${name} ${type}`);
 }
 
 /** Existing remote monitor IDs are adopted without any provider calls. */
@@ -249,9 +288,9 @@ function migrateSources(db: Database): void {
       db.run(EVIDENCE_SCHEMA);
       db.run(`INSERT INTO evidence
         (id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning,
-         imported, relationship, relationship_automated, observation_hash)
+         imported, relationship, relationship_automated, observation_hash, kind)
         SELECT id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning,
-         imported, 'unknown', 1, id FROM old_evidence`);
+         imported, 'unknown', 1, id, 'legacy' FROM old_evidence`);
       db.run(`INSERT INTO evidence_reviews (id, evidence_id, decision, note, reviewed_at)
         SELECT id, evidence_id, decision, note, reviewed_at FROM old_evidence_reviews`);
       db.run("DROP TABLE old_evidence_reviews");
@@ -337,8 +376,8 @@ function portfolioHypotheses(db: Database): void {
      FROM old_hypothesis_versions v JOIN old_hypotheses h ON h.id = v.hypothesis_id ORDER BY v.id`,
   );
   db.run(
-    `INSERT INTO evidence (id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning, observation_hash)
-     SELECT e.id, h.company_id, h.lens, e.title, e.claim, e.url, e.published_at, e.discovered_at, e.type, e.source, e.source_reasoning, e.id
+    `INSERT INTO evidence (id, company_id, hypothesis_id, title, claim, url, published_at, discovered_at, type, source, source_reasoning, observation_hash, kind)
+     SELECT e.id, h.company_id, h.lens, e.title, e.claim, e.url, e.published_at, e.discovered_at, e.type, e.source, e.source_reasoning, e.id, 'legacy'
      FROM old_evidence e JOIN old_hypotheses h ON h.id = e.hypothesis_id ORDER BY e.rowid`,
   );
   const job = "CASE kind WHEN 'search' THEN 'research' WHEN 'agent' THEN 'assess' ELSE 'watch' END";

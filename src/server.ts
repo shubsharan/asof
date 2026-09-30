@@ -1,6 +1,7 @@
 import index from "./index.html";
 import { createDb } from "./db/schema";
-import { dismissProposal, groupEvidence, listCompanies, listHypotheses, listProposals, reviewEvidence, saveAssessment, setEvidenceRelationship, type NewOfficialAssessment } from "./db/queries";
+import { dismissProposal, groupEvidence, listCompaniesData, listHypotheses, listProposals, reviewEvidence, saveAssessment, setEvidenceRelationship, type NewOfficialAssessment } from "./db/queries";
+import { researchHistory, researchView } from "./domain/research";
 import { createSchedule, deleteSchedule, listRuns, listSchedules, recoverRuns, updateSchedule } from "./db/runs";
 import type { ReviewDecision, RunTarget, SourceRelationship } from "./domain/types";
 import { pageThenAndNow } from "./exa/snapshot";
@@ -43,8 +44,20 @@ const server = Bun.serve({
   idleTimeout: 60, // Exa Snapshot fetches two versions of a page
   routes: {
     "/*": index, // React app; the /api routes below take precedence
-    // The whole portfolio with full history and evidence; the client rewinds it with thesisAsOf.
-    "/api/companies": { GET: (req) => Response.json(listCompanies(db, asOfParam(req))) },
+    "/api/companies": { GET: (req) => {
+      const p = params(req);
+      const companies = listCompaniesData(db);
+      if (p.get("raw") === "1") return Response.json(companies);
+      const mode = p.get("history") ?? "recorded";
+      if (mode !== "recorded" && mode !== "reconstruction") return badRequest("Unknown research history mode");
+      const selected = p.get("assessmentId");
+      const assessmentId = selected === null ? undefined : Number(selected);
+      if (assessmentId !== undefined && (!Number.isSafeInteger(assessmentId) || assessmentId < 1)) return badRequest("Invalid assessment ID");
+      if (assessmentId !== undefined && !companies.some((company) => company.hypotheses.some((h) => researchHistory(h, mode).some((item) => item.id === assessmentId)))) return notFound();
+      const asOf = asOfParam(req);
+      if (asOf && (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?$/.test(asOf) || !Number.isFinite(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf.slice(0, 10))) return badRequest("Invalid research date");
+      return Response.json(companies.map((company) => researchView(company, asOf, mode, assessmentId)));
+    } },
     "/api/hypotheses": { GET: () => Response.json(listHypotheses(db)) },
     "/api/companies/:id/watch": {
       GET: async (req) => {

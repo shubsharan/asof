@@ -164,7 +164,8 @@ function MarkerDot({ marker: m, row, p }: { marker: Marker; row: SliceRow; p: Po
       <title>{`${row.label}, ${formatDate(m.asOf)}: ${m.verdict}, ${m.confidence}% confident${m.fresh ? "" : " (carried, not reassessed this day)"}`}</title>
     </g>
   );
-  return row.href ? <a href={row.href}>{dot}</a> : dot;
+  const href = row.href && `${row.href}${row.href.includes("?") ? "&" : "?"}asOf=${encodeURIComponent(m.asOf)}${m.assessmentId === undefined ? "" : `&assessmentId=${m.assessmentId}`}`;
+  return href ? <a href={href}>{dot}</a> : dot;
 }
 
 function Trails({ from, to, k, rows, cursor, focus }: { from: Slice; to: Slice; k: number; rows: SliceRow[]; cursor: string | undefined; focus?: string }) {
@@ -225,7 +226,7 @@ function RowLegend({ rows, avatar, focus, onFocus }: { rows: SliceRow[]; avatar?
 }
 
 /** What the marks mean: colour is the verdict, fill is freshness, the halo is confidence. */
-export function SliceLegend() {
+export function SliceLegend({ reconstructed = false }: { reconstructed?: boolean }) {
   const swatch = (children: ReactNode) => (
     <svg viewBox="-8 -8 16 16" className="size-4 shrink-0 overflow-visible" aria-hidden>
       {children}
@@ -236,7 +237,7 @@ export function SliceLegend() {
     ["assessed", swatch(<circle r={4} className="fill-foreground/70" />)],
     ["carried", swatch(<circle r={3.5} className="fill-background stroke-foreground/70" strokeWidth={1.5} />)],
     ["confidence", swatch(<><circle r={7.5} className="fill-foreground/15" /><circle r={3} className="fill-foreground/70" /></>)],
-    ["new evidence", swatch(<>{[-5, 0, 5].map((y) => <circle key={y} cy={y} r={1.5} className="fill-foreground/50" />)}</>)],
+    [reconstructed ? "sources by publication date" : "newly collected evidence", swatch(<>{[-5, 0, 5].map((y) => <circle key={y} cy={y} r={1.5} className="fill-foreground/50" />)}</>)],
   ] as const;
   const group = (items: readonly (readonly [string, ReactNode])[]) => (
     <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">

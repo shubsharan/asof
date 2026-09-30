@@ -56,6 +56,8 @@ test("v2 turns per-company hypotheses into portfolio hypotheses and keys data by
   expect(exa.researchHistory?.map((v) => v.originalAsOf)).toEqual(["2026-03-01", "2026-06-04"]);
   expect(exa.evidence.map((e) => [e.id, e.companyId])).toEqual([["e1", "exa"]]);
   expect(exa.evidence[0]).toMatchObject({ imported: true, review: undefined, reviewHistory: [] });
+  expect(exa.evidence[0]!.kind).toBe("legacy");
+  expect(exa.rubric?.supportingSignals.length).toBeGreaterThan(0);
   expect(getCompany(db, "brave")!.hypotheses.map((h) => [h.id, h.verdict, h.evidence.length])).toEqual([
     ["moat", "untested", 1],
     ["go-to-market", "untested", 0],
@@ -76,7 +78,7 @@ test("a database from before lenses (the frozen demo) migrates too, gaining runs
   migrate(db);
   expect(db.query("SELECT id FROM hypotheses ORDER BY rowid").all()).toEqual([{ id: "moat" }, { id: "go-to-market" }]);
   expect(db.query("SELECT count(*) AS n FROM runs").get()).toEqual({ n: 0 });
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 7 });
 });
 
 test("migrating is idempotent", () => {

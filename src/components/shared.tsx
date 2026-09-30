@@ -65,10 +65,20 @@ export function usePolling(fn: () => unknown, ms: number, enabled: boolean) {
   }, [fn, ms, enabled]);
 }
 
-/** `path` with `?asOf=` added when viewing a past date. Keeps any query `path` already has. */
+/** `path` with the current history view retained during navigation. */
 export function withAsOf(path: string, asOf?: string) {
-  if (!asOf) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}asOf=${encodeURIComponent(asOf)}`;
+  const mode = typeof location === "undefined" ? undefined : new URLSearchParams(location.search).get("history");
+  return researchLink(path, { asOf, mode: mode === "reconstruction" ? mode : undefined });
+}
+
+export function researchLink(path: string, { asOf, mode, assessmentId }: { asOf?: string; mode?: "recorded" | "reconstruction"; assessmentId?: number }) {
+  const [pathname, query] = path.split("?", 2);
+  const params = new URLSearchParams(query);
+  if (asOf) params.set("asOf", asOf);
+  if (mode) params.set("history", mode);
+  if (assessmentId !== undefined) params.set("assessmentId", String(assessmentId));
+  const suffix = params.toString();
+  return `${pathname}${suffix ? `?${suffix}` : ""}`;
 }
 
 /**
@@ -76,8 +86,8 @@ export function withAsOf(path: string, asOf?: string) {
  * and `reload` to refetch after a research run. Both are undefined until the portfolio has loaded.
  */
 export function useCompany(id: string | undefined) {
-  const { companies, companiesAsOf, reload } = usePortfolio();
-  return { company: companiesAsOf.find((c) => c.id === id), today: companies.find((c) => c.id === id), reload };
+  const { companiesAsOf, companies, rawCompanies, reload } = usePortfolio();
+  return { company: companiesAsOf.find((c) => c.id === id), today: companies.find((c) => c.id === id), raw: rawCompanies.find((c) => c.id === id), reload };
 }
 
 export const formatDate = (iso: string) =>
@@ -85,6 +95,8 @@ export const formatDate = (iso: string) =>
 
 export const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+export const formatResearchTime = (iso: string) => iso.includes("T") ? formatDateTime(iso) : formatDate(iso);
 
 export const formatConfidence = (c?: number) => (c === undefined ? "—" : `${c}%`);
 
@@ -149,7 +161,7 @@ export const tone = (d?: Direction | "untested") => DIRECTION[!d || d === "untes
 export function VerdictBadge({ verdict }: { verdict: Hypothesis["verdict"] }) {
   const label: Record<Hypothesis["verdict"], string> = {
     supports: "Supported",
-    neutral: "Mixed evidence",
+    neutral: "Inconclusive",
     contradicts: "Challenged",
     untested: "Unassessed",
   };
@@ -178,12 +190,17 @@ export function EvidenceTypeBadge({ type }: { type?: Evidence["type"] }) {
   );
 }
 
+export const evidenceKindLabel = (evidence: Evidence) => ({
+  lead: "Collected lead", claim: "Passage matched", legacy: "Legacy evidence",
+})[evidence.kind ?? "legacy"];
+
 export function EvidenceRow({ evidence, context, action }: { evidence: Evidence; context?: string; action?: React.ReactNode }) {
   return (
     <li className="min-w-0 space-y-2 py-4">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>{hostOf(evidence.url)}</span>
         {evidence.publishedAt && <span>{formatDate(evidence.publishedAt)}</span>}
+        <span>{evidenceKindLabel(evidence)}</span>
         {evidence.type && <EvidenceTypeBadge type={evidence.type} />}
         {context && <span>{context}</span>}
       </div>
