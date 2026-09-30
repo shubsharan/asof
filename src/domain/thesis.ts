@@ -2,24 +2,44 @@ import type { Company, Evidence, Hypothesis } from "./types";
 
 // Dates are compared by day, so anything on the as-of date itself counts as known.
 const day = (iso: string) => iso.slice(0, 10);
+const knownBy = (iso: string, cursor: string) => cursor.length <= 10
+  ? day(iso) <= cursor
+  : Date.parse(iso) <= Date.parse(cursor);
 
-/** When the evidence became knowable: its publish date, or when we found it if undated. */
-export const knownAt = (e: Evidence) => e.publishedAt ?? e.discoveredAt;
+/** Official history starts when AsOf recorded the evidence, regardless of its publication date. */
+export const knownAt = (e: Evidence) => e.discoveredAt;
 
 /**
  * The thesis as it looked on `date`: each hypothesis at its latest assessment on or before
- * that day, with only the evidence published by then. Unassessed hypotheses are "untested".
+ * that day, with only the evidence recorded by then. Unassessed hypotheses are "untested".
  */
 export function thesisAsOf(company: Company, date: string): Company {
   const hypotheses = company.hypotheses.map((h): Hypothesis => {
-    const history = h.history.filter((v) => day(v.asOf) <= day(date));
+    const history = h.history.filter((v) => knownBy(v.asOf, date));
     const latest = history.at(-1);
+    const capturedReviews = new Set(history.flatMap((v) => v.reviewedEvidenceReviewIds ?? []));
+    const evidence = h.evidence.filter((e) => knownBy(knownAt(e), date)).map((e) => {
+      const reviewHistory = (e.reviewHistory ?? []).filter((r) => knownBy(r.reviewedAt, date));
+      return { ...e, reviewHistory, review: reviewHistory.at(-1) };
+    });
+    const reviewCounts = { unreviewed: 0, relevant: 0, irrelevant: 0, disputed: 0, pending: 0 };
+    for (const e of evidence) {
+      if (!e.review) reviewCounts.unreviewed++;
+      else {
+        reviewCounts[e.review.decision]++;
+        if (e.review.decision !== "irrelevant" && !capturedReviews.has(e.review.id)) reviewCounts.pending++;
+      }
+    }
     return {
       ...h,
       confidence: latest?.confidence,
       verdict: latest?.verdict ?? "untested",
       history,
-      evidence: h.evidence.filter((e) => day(knownAt(e)) <= day(date)),
+      evidence,
+      reportCount: evidence.length,
+      developmentCount: new Set(evidence.map((item) => item.groupId ?? item.id)).size,
+      reviewCounts,
+      pendingProposals: h.pendingProposals?.filter((p) => knownBy(p.createdAt, date)),
     };
   });
   return { ...company, hypotheses };

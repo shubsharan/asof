@@ -11,7 +11,7 @@ const version = (asOf: string, confidence: number, verdict: HypothesisVersion["v
   openQuestions: [],
 });
 
-const ev = (id: string, publishedAt: string | undefined, type?: Evidence["type"], discoveredAt = "2026-09-20"): Evidence => ({
+const ev = (id: string, publishedAt: string | undefined, type?: Evidence["type"], discoveredAt = publishedAt ?? "2026-09-20"): Evidence => ({
   id,
   companyId: "acme",
   hypothesisId: "h",
@@ -22,6 +22,8 @@ const ev = (id: string, publishedAt: string | undefined, type?: Evidence["type"]
   discoveredAt,
   type,
   source: "search",
+  relationship: "unknown",
+  relationshipAutomated: true,
 });
 
 const row = (id: string, history: HypothesisVersion[], evidence: Evidence[] = []): SliceRow => ({ id, label: id, history, evidence });
@@ -42,6 +44,12 @@ test("sliceDays are the distinct assessment days across rows, ascending", () => 
 
 test("sliceDays is empty when nothing is assessed", () => {
   expect(sliceDays([row("a", [])])).toEqual([]);
+});
+
+test("analyst decisions without model confidence do not become chart scores", () => {
+  const history: HypothesisVersion[] = [{ asOf: "2026-09-28", verdict: "supports", reasoning: "Reviewed", evidenceIds: ["x"], openQuestions: [] }];
+  expect(sliceDays([row("a", history)])).toEqual([]);
+  expect(buildSlices([row("a", history)], ["2026-09-28"])[0]!.cells[0]!.marker).toBeUndefined();
 });
 
 test("buildSlices marks a same-day assessment fresh, carries the previous one, and omits before the first", () => {

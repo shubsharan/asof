@@ -1,4 +1,4 @@
-import { FlaskConical, Inbox, LayoutGrid, Settings } from "lucide-react";
+import { FlaskConical, LayoutGrid, Newspaper, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,17 +14,14 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { useAsOf } from "./asof";
 import { companyPath, type Route } from "./routes";
-import { CompanyAvatar, openResearch, withAsOf } from "./shared";
+import { CompanyAvatar, openResearch } from "./shared";
 import { usePortfolio } from "./usePortfolio";
 
 /** Portfolio (with its companies), Updates, Settings; Runs opens as a panel. Hypotheses live on the Portfolio cards. */
 export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: number }) {
   const { companies } = usePortfolio();
-  const { asOf } = useAsOf();
   const companyId = "companyId" in route ? route.companyId : undefined;
-  const link = (path: string) => withAsOf(path, asOf);
 
   return (
     <Sidebar collapsible="icon">
@@ -32,7 +29,7 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href={link("/")}>
+              <a href={"/"}>
                 <span className="flex aspect-square size-8 items-center justify-center rounded bg-primary font-mono text-sm text-primary-foreground">A</span>
                 <span className="font-semibold">AsOf</span>
               </a>
@@ -45,17 +42,17 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Portfolio" isActive={route.page === "portfolio" || route.page === "hypotheses" || !!companyId}>
-                <a href={link("/")}>
-                  <LayoutGrid />
-                  <span>Portfolio</span>
+              <SidebarMenuButton asChild tooltip="Research" isActive={route.page === "portfolio" || route.page === "hypotheses" || !!companyId}>
+                <a href={"/"}>
+                  <Newspaper />
+                  <span>Research</span>
                 </a>
               </SidebarMenuButton>
               <SidebarMenuSub>
                 {companies.map((c) => (
                   <SidebarMenuSubItem key={c.id}>
                     <SidebarMenuSubButton asChild isActive={c.id === companyId} className={c.hypotheses.some((h) => h.history.length) ? undefined : "text-muted-foreground"}>
-                      <a href={link(companyPath(c.id))}>
+                      <a href={companyPath(c.id)}>
                         <CompanyAvatar company={c} className="size-4" />
                         <span>{c.name}</span>
                       </a>
@@ -67,8 +64,8 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
 
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="Updates" isActive={route.page === "updates"}>
-                <a href={link("/updates")}>
-                  <Inbox />
+                <a href={"/updates"}>
+                  <LayoutGrid />
                   <span>Updates</span>
                 </a>
               </SidebarMenuButton>
@@ -76,7 +73,7 @@ export function AppSidebar({ route, activeRuns }: { route: Route; activeRuns: nu
 
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="Settings" isActive={route.page === "settings"}>
-                <a href={link("/settings")}>
+                <a href={"/settings"}>
                   <Settings />
                   <span>Settings</span>
                 </a>

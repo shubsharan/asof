@@ -1,11 +1,13 @@
 import index from "./index.html";
 import { createDb } from "./db/schema";
-import { listCompanies, listHypotheses } from "./db/queries";
+import { dismissProposal, groupEvidence, listCompanies, listHypotheses, listProposals, reviewEvidence, saveAssessment, setEvidenceRelationship, type NewOfficialAssessment } from "./db/queries";
 import { createSchedule, deleteSchedule, listRuns, listSchedules, recoverRuns, updateSchedule } from "./db/runs";
-import type { RunTarget } from "./domain/types";
+import type { ReviewDecision, RunTarget, SourceRelationship } from "./domain/types";
 import { pageThenAndNow } from "./exa/snapshot";
+import { createMonitor, deleteMonitor, getMonitor, monitorPayload } from "./exa/monitor";
 import { createRunner, type Runner } from "./runner";
 import { startScheduler } from "./scheduler";
+import { inspectWatch, startWatch, stopWatch, type WatchProvider } from "./watch";
 
 // `bun --hot` re-evaluates this module on every save but keeps `globalThis`. Keep one database and
 // one runner for the process (so in-flight runs aren't mistaken for interrupted ones), and replace
@@ -27,6 +29,15 @@ const notFound = () => new Response("Not found", { status: 404 });
 const badRequest = (e: unknown) => new Response(e instanceof Error ? e.message : String(e), { status: 400 });
 const params = (req: Request) => new URL(req.url).searchParams;
 const asOfParam = (req: Request) => params(req).get("asOf") ?? undefined;
+const watchProvider: WatchProvider = {
+  payload: monitorPayload,
+  create: (company, options) => createMonitor(company, {
+    idempotencyKey: options.idempotencyKey,
+    stablePayload: JSON.parse(options.stablePayloadJson),
+  }),
+  delete: deleteMonitor,
+  get: getMonitor,
+};
 
 const server = Bun.serve({
   idleTimeout: 60, // Exa Snapshot fetches two versions of a page
@@ -35,6 +46,80 @@ const server = Bun.serve({
     // The whole portfolio with full history and evidence; the client rewinds it with thesisAsOf.
     "/api/companies": { GET: (req) => Response.json(listCompanies(db, asOfParam(req))) },
     "/api/hypotheses": { GET: () => Response.json(listHypotheses(db)) },
+    "/api/companies/:id/watch": {
+      GET: async (req) => {
+        const watch = await inspectWatch(db, req.params.id, watchProvider);
+        return watch ? Response.json(watch) : notFound();
+      },
+      POST: async (req) => {
+        try {
+          return Response.json(await startWatch(db, runner, req.params.id, watchProvider), { status: 202 });
+        } catch (e) {
+          return new Response(e instanceof Error ? e.message : String(e), { status: 502 });
+        }
+      },
+      DELETE: async (req) => {
+        try {
+          const watch = await stopWatch(db, req.params.id, watchProvider);
+          return Response.json(watch);
+        } catch (e) {
+          return new Response(e instanceof Error ? e.message : String(e), { status: 502 });
+        }
+      },
+    },
+    "/api/proposals": {
+      GET: (req) => {
+        const p = params(req);
+        return Response.json(listProposals(db, {
+          companyId: p.get("companyId") ?? undefined,
+          hypothesisId: p.get("hypothesisId") ?? undefined,
+        }));
+      },
+    },
+    "/api/proposals/:id/dismiss": {
+      POST: (req) => {
+        const proposal = dismissProposal(db, req.params.id);
+        return proposal ? Response.json(proposal) : notFound();
+      },
+    },
+    "/api/assessments": {
+      POST: async (req) => {
+        try {
+          return Response.json(saveAssessment(db, (await req.json()) as NewOfficialAssessment), { status: 201 });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          return new Response(message, { status: message.includes("stale") ? 409 : 400 });
+        }
+      },
+    },
+    "/api/evidence/:id/reviews": {
+      POST: async (req) => {
+        try {
+          return Response.json(reviewEvidence(db, req.params.id, (await req.json()) as { decision: ReviewDecision; note?: string }), { status: 201 });
+        } catch (e) {
+          return badRequest(e);
+        }
+      },
+    },
+    "/api/evidence/:id/relationship": {
+      POST: async (req) => {
+        try {
+          const body = (await req.json()) as { relationship: SourceRelationship };
+          return Response.json(setEvidenceRelationship(db, req.params.id, body?.relationship));
+        } catch (e) {
+          return badRequest(e);
+        }
+      },
+    },
+    "/api/evidence/groups": {
+      POST: async (req) => {
+        try {
+          return Response.json(groupEvidence(db, (await req.json()) as { evidenceIds: string[]; groupId?: string | null }));
+        } catch (e) {
+          return badRequest(e);
+        }
+      },
+    },
 
     // Research runs. Starting one returns immediately; the runner works through the queue.
     "/api/runs": {
@@ -82,8 +167,15 @@ const server = Bun.serve({
 
     "/api/snapshot": {
       POST: async (req) => {
-        const { url, asOf } = (await req.json()) as { url: string; asOf: string };
-        return Response.json(await pageThenAndNow(url, asOf));
+        try {
+          const body: unknown = await req.json();
+          if (!body || typeof body !== "object" || !("url" in body) || typeof body.url !== "string") throw new Error("Snapshot URL is required");
+          const asOf = "asOf" in body ? body.asOf : undefined;
+          if (asOf !== undefined && typeof asOf !== "string") throw new Error("Snapshot cutoff must be a string");
+          return Response.json(await pageThenAndNow(body.url, asOf));
+        } catch (e) {
+          return badRequest(e);
+        }
       },
     },
   },

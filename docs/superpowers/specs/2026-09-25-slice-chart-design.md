@@ -13,7 +13,7 @@ slices, so a dot moving through time is a visible path.
 
 This is a zoom level of the existing "one time axis, one cursor" idea in another projection, not a new
 page: it lives above the strip rows on the single-hypothesis page and on the company page, and the
-header scrubber's cursor highlights a slice.
+scrubber card's cursor highlights a slice.
 
 ## Decisions made with the user
 
@@ -115,6 +115,9 @@ Rendering, in draw order (back slice to front slice):
    dots pile downward, neutral and unclassified dots sit along the zero line offset sideways. Colors
    from `DIRECTION[...].fill`, unclassified muted. Overflow renders as a small `+N` label at the top or
    bottom of the stack.
+
+   Neutral and unclassified dots along the zero line are capped at 10 per cell (`ALONG_CAP`) so they
+   stay inside the column; the rest is one `+N`.
 3. Per column, the marker: a translucent halo (radius `markerRadius + haloMax × confidence/100`, same
    fill at low opacity), then the dot: filled with the verdict color when fresh, hollow (verdict-colored
    stroke, background fill) when carried. A `<title>` gives date, verdict, confidence and whether it was
@@ -123,9 +126,10 @@ Rendering, in draw order (back slice to front slice):
    panel so it dims behind it. Muted stroke; uses the next marker's verdict color when the verdict
    changed, so flips stand out.
 
-Cursor: the slice returned by `cursorSlice` gets an emphasized border and full opacity; every other
-slice is drawn at reduced opacity. Clicking a panel calls `onPickDate(day)`. Clicking a marker follows
-`row.href` if set.
+Cursor: the slice returned by `cursorSlice` gets an emphasized border and full opacity; slices before
+it are dimmed (60%), and slices after it, which weren't known yet, are dimmer (25%). Trails take the
+opacity of the slice they lead into, so a flip in the future is as faint as its slice. Clicking a panel
+calls `onPickDate(day)`. Clicking a marker follows `row.href` if set.
 
 Labels: column labels (avatar + label) along the front slice's base, one per row. A one-line legend
 under the chart: filled dot = assessed that day, hollow = carried, halo = confidence, small dots =
@@ -165,3 +169,6 @@ with the scrubber rewound to each assessment day. The repo has no DOM tests and 
 - Orbit/rotation, WebGL
 - Calendar-interval slices
 - Any change to the data model or backfill
+- A window on the number of slices. Slices are every assessment day; once assess schedules run often
+  the chart needs to show the last N slices around the cursor with a "+K earlier" note. Tracked as a
+  follow-up.

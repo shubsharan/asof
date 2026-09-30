@@ -9,11 +9,18 @@ export const day = (iso: string) => iso.slice(0, 10);
 export const todayUTC = () => day(new Date().toISOString());
 export const addDays = (d: string, n: number) => day(new Date(Date.parse(day(d)) + n * MS_PER_DAY).toISOString());
 
-/** The span every strip and the scrubber on a page share, so one cursor lines up across them. */
-export type Domain = [start: string, end: string];
+/**
+ * The axis every strip and the scrubber on a page share, so one cursor lines up across them. It is
+ * a list of knots, oldest first: the axis start, every assessment day, today, and the axis end.
+ * Checkpoints are what the reader steps between, so each gap between knots gets the same width however
+ * many days it spans; days inside a gap are spaced evenly.
+ */
+export type Domain = [start: string, ...rest: string[]];
 
 const START_PADDING_DAYS = 45;
 const FALLBACK_SPAN_DAYS = 365;
+/** The stretch before the first assessment is padding, not a gap between checkpoints: half a gap wide. */
+const LEAD_IN = 0.5;
 
 /**
  * From a little before the portfolio's first assessment (a year back if nothing is assessed yet)
@@ -25,28 +32,62 @@ export function timeDomain(companies: Company[], today: string): Domain {
   const first = assessed.toSorted()[0];
   const start = first ? addDays(first, -START_PADDING_DAYS) : addDays(today, -FALLBACK_SPAN_DAYS);
   const end = [today, ...assessed, ...known].toSorted().at(-1)!;
-  return [start, end];
+  return [start, ...new Set([...assessed, today, end].filter((d) => d > start).sort())];
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-/** Linear day scale over `width` pixels; both directions clamp to the domain. */
-export function scale([start, end]: Domain, width: number) {
-  const t0 = Date.parse(start);
-  const span = Math.max(MS_PER_DAY, Date.parse(end) - t0);
+/** Day scale over `width` pixels, even between knots and linear within each gap; both directions clamp to the domain. */
+export function scale(domain: Domain, width: number) {
+  const t = domain.map((d) => Date.parse(day(d)));
+  if (t.length < 2) t.push(t[0]! + MS_PER_DAY);
+  const weights = t.slice(1).map((_, i) => (i === 0 && t.length > 2 ? LEAD_IN : 1));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const px = weights.reduce((acc, w) => [...acc, acc.at(-1)! + (w / total) * width], [0]);
+  const gap = (i: number) => Math.min(i, t.length - 2);
   return {
-    x: (iso: string) => clamp(((Date.parse(day(iso)) - t0) / span) * width, 0, width),
+    x: (iso: string) => {
+      const ms = clamp(Date.parse(day(iso)), t[0]!, t.at(-1)!);
+      const i = gap(t.findLastIndex((k) => k <= ms));
+      return px[i]! + ((ms - t[i]!) / (t[i + 1]! - t[i]!)) * (px[i + 1]! - px[i]!);
+    },
     day: (x: number) => {
-      const ms = t0 + (clamp(x, 0, width) / width) * span;
+      const at = clamp(x, 0, width);
+      const i = gap(Math.max(0, px.findLastIndex((p) => p <= at)));
+      const ms = t[i]! + ((at - px[i]!) / (px[i + 1]! - px[i]! || 1)) * (t[i + 1]! - t[i]!);
       return day(new Date(Math.round(ms / MS_PER_DAY) * MS_PER_DAY).toISOString());
     },
   };
 }
 
-/** Distinct days on which anything was assessed, before today, oldest first. Today is its own cursor stop. */
+/** Distinct days on which anything was assessed, up to and including today, oldest first: the checkpoints. */
 export function assessmentDays(companies: Company[], today: string): string[] {
   const days = companies.flatMap((c) => c.hypotheses.flatMap((h) => h.history.map((v) => day(v.asOf))));
-  return [...new Set(days)].filter((d) => d < today).sort();
+  return [...new Set(days)].filter((d) => d <= today).sort();
+}
+
+export type CalendarTick = { day: string; x: number; week: boolean };
+
+/** A day is ticked where it's at least this wide; a week (its Monday) where the week is at least this wide. */
+const DAY_TICK_MIN_PX = 4;
+const WEEK_TICK_MIN_PX = 6;
+
+/**
+ * Regular ticks for the scrubber: every Monday, and every day wherever days are wide enough to tell
+ * apart. Gaps between checkpoints are equal width but not equal length, so density varies by gap.
+ */
+export function calendarTicks(domain: Domain, width: number): CalendarTick[] {
+  const s = scale(domain, width);
+  const end = domain.at(-1)!;
+  const ticks: CalendarTick[] = [];
+  for (let d = domain[0]; d <= end; d = addDays(d, 1)) {
+    const x = s.x(d);
+    const week = new Date(Date.parse(d)).getUTCDay() === 1;
+    // Measured both ways, since the scale clamps at the axis ends.
+    const span = (n: number) => Math.max(s.x(addDays(d, n)) - x, x - s.x(addDays(d, -n)));
+    if (week ? span(7) >= WEEK_TICK_MIN_PX : span(1) >= DAY_TICK_MIN_PX) ticks.push({ day: d, x, week });
+  }
+  return ticks;
 }
 
 export type Segment = {
@@ -59,14 +100,15 @@ export type Segment = {
 };
 
 /** Confidence holds from each assessment until the next one, and the last holds to the end of the domain. */
-export function stepSegments(history: HypothesisVersion[], [, end]: Domain): Segment[] {
-  return history.map((v, i) => ({
+export function stepSegments(history: HypothesisVersion[], domain: Domain): Segment[] {
+  const end = domain.at(-1)!;
+  return history.flatMap((v, i) => v.confidence === undefined ? [] : [{
     asOf: v.asOf,
     from: day(v.asOf),
     to: day(history[i + 1]?.asOf ?? end),
     verdict: v.verdict,
     confidence: v.confidence,
-  }));
+  }]);
 }
 
 export type Tick = { id: string; at: string; type?: Direction };

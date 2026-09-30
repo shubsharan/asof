@@ -1,7 +1,7 @@
 // Chart space for the slice chart is (u, v, w): u runs along a slice across its columns, v is the
 // lean (up), w is the time axis stacking slices in depth. Screen space is a standard 30° isometric
-// projection with w running down-right and u down-left, so the newest slice is front-right and larger
-// screen y is nearer the viewer. Everything tunable about the look lives in ISO.
+// projection with w running up-right and u down-right, so time reads bottom-left to top-right and
+// columns keep their left-to-right order. Everything tunable about the look lives in ISO.
 
 export const ISO = {
   /** Pixels along the column axis per row. */
@@ -11,7 +11,7 @@ export const ISO = {
   /** Pixels of plane height for lean −100..100. */
   planeHeight: 200,
   /** Gap from the panel edge to the first and last column. */
-  columnInset: 36,
+  columnInset: 32,
   /** Vertical spacing of evidence dots in a stack. */
   dotPitch: 5,
   dotRadius: 2,
@@ -20,8 +20,8 @@ export const ISO = {
   haloMax: 16,
 };
 
-/** Padding around the panels for the date labels (top/right) and column labels (bottom/left). */
-export const PAD = { top: 24, right: 160, bottom: 40, left: 16 };
+/** Room around the panels for halos and "+N" overflow counts; labels live outside the chart. */
+export const PAD = 24;
 
 const COS = Math.sqrt(3) / 2;
 const SIN = 0.5;
@@ -30,7 +30,7 @@ export type Point = { x: number; y: number };
 export type Box = { x: number; y: number; width: number; height: number };
 
 export function project(u: number, v: number, w: number): Point {
-  return { x: COS * (w - u), y: SIN * (w + u) - v };
+  return { x: COS * (u + w), y: SIN * (u - w) - v };
 }
 
 export const columnU = (i: number) => ISO.columnInset + i * ISO.columnPitch;
@@ -38,7 +38,7 @@ export const planeWidth = (columns: number) => 2 * ISO.columnInset + Math.max(0,
 export const leanV = (lean: number) => (lean / 100) * (ISO.planeHeight / 2);
 export const sliceW = (k: number) => k * ISO.sliceDepth;
 
-/** The four corners of slice `k`'s plane: top-right, top-left, bottom-left, bottom-right on screen. */
+/** The four corners of slice `k`'s plane: top-left, top-right, bottom-right, bottom-left on screen. */
 export function panelCorners(columns: number, k: number): Point[] {
   const W = planeWidth(columns);
   const H = ISO.planeHeight / 2;
@@ -46,14 +46,14 @@ export function panelCorners(columns: number, k: number): Point[] {
   return [project(0, H, w), project(W, H, w), project(W, -H, w), project(0, -H, w)];
 }
 
-/** A viewBox enclosing every panel plus room for labels. */
+/** A viewBox enclosing every panel plus PAD. */
 export function bounds(columns: number, slices: number): Box {
   const pts = Array.from({ length: Math.max(1, slices) }, (_, k) => panelCorners(columns, k)).flat();
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
-  const x = Math.min(...xs) - PAD.left;
-  const y = Math.min(...ys) - PAD.top;
-  return { x, y, width: Math.max(...xs) + PAD.right - x, height: Math.max(...ys) + PAD.bottom - y };
+  const x = Math.min(...xs) - PAD;
+  const y = Math.min(...ys) - PAD;
+  return { x, y, width: Math.max(...xs) + PAD - x, height: Math.max(...ys) + PAD - y };
 }
 
 export const toPoints = (pts: Point[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");

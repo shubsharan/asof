@@ -5,6 +5,7 @@ import { createRun, createSchedule, getRun, listRuns, listSchedules, recoverRuns
 import type { RunResult } from "../domain/types";
 import { createRunner, type Executor } from "../runner";
 import { tick } from "../scheduler";
+import { markWatchActive } from "../db/watches";
 
 function setup() {
   const db = createDb(":memory:");
@@ -30,7 +31,7 @@ test("a run moves from queued to running to done and records its result", async 
 
   const run = runner.enqueue(research());
   expect(run.status).toBe("running");
-  pending[0]!.resolve({ evidenceAdded: 3 });
+  pending[0]!.resolve({ evidenceAdded: 3, evidenceIds: ["a", "b", "c"] });
   await runner.idle();
 
   expect(getRun(db, run.id)).toMatchObject({ status: "done", result: { evidenceAdded: 3 } });
@@ -42,7 +43,7 @@ test("a failing run records its error and the queue keeps going", async () => {
   let calls = 0;
   const runner = createRunner(db, async () => {
     if (calls++ === 0) throw new Error("Exa is down");
-    return { evidenceAdded: 1 };
+    return { evidenceAdded: 1, evidenceIds: ["a"] };
   }, 1);
 
   const a = runner.enqueue(research("adoption"));
@@ -63,7 +64,7 @@ test("enqueueing the same target twice returns the run already in progress", asy
   expect(again.id).toBe(first.id);
   expect(runner.enqueue({ ...research(), job: "assess" }).id).not.toBe(first.id);
 
-  pending.forEach((p) => p.resolve({ evidenceAdded: 0 }));
+  pending.forEach((p) => p.resolve({ evidenceAdded: 0, evidenceIds: [] }));
   await runner.idle();
   expect(runner.enqueue(research()).id).not.toBe(first.id); // finished runs don't block new ones
 });
@@ -81,10 +82,10 @@ test("no more than `concurrency` runs execute at once", async () => {
   expect(pending).toHaveLength(2);
   expect(getRun(db, runs[2]!.id)!.status).toBe("queued");
 
-  pending[0]!.resolve({ evidenceAdded: 0 });
+  pending[0]!.resolve({ evidenceAdded: 0, evidenceIds: [] });
   await Bun.sleep(0);
   expect(pending).toHaveLength(3);
-  pending.slice(1).forEach((p) => p.resolve({ evidenceAdded: 0 }));
+  pending.slice(1).forEach((p) => p.resolve({ evidenceAdded: 0, evidenceIds: [] }));
   await runner.idle();
   expect(listRuns(db).every((r) => r.status === "done")).toBe(true);
 });
@@ -106,7 +107,7 @@ test("after a restart, interrupted runs fail and queued runs are picked up again
   expect(queued.map((r) => r.id)).toEqual([waiting.id]);
   expect(getRun(db, interrupted.id)).toMatchObject({ status: "failed", error: "Interrupted by server restart" });
 
-  const runner = createRunner(db, async () => ({ evidenceAdded: 2 }));
+  const runner = createRunner(db, async () => ({ evidenceAdded: 2, evidenceIds: ["a", "b"] }));
   runner.resume(queued);
   await runner.idle();
   expect(getRun(db, waiting.id)!.status).toBe("done");
@@ -115,9 +116,10 @@ test("after a restart, interrupted runs fail and queued runs are picked up again
 test("the scheduler queues due, enabled schedules once and advances them", async () => {
   const db = setup();
   const daily = createSchedule(db, { job: "research", companyId: "acme", hypothesisId: "adoption", everyHours: 24 }, "2026-09-01T00:00:00.000Z");
+  markWatchActive(db, "acme", "monitor-1", "2026-09-01T00:00:00.000Z");
   const paused = createSchedule(db, { job: "watch", companyId: "acme", everyHours: 1 }, "2026-09-01T00:00:00.000Z");
   updateSchedule(db, paused.id, { enabled: false });
-  const runner = createRunner(db, async () => ({ evidenceAdded: 0 }));
+  const runner = createRunner(db, async () => ({ evidenceAdded: 0, evidenceIds: [] }));
 
   expect(tick(db, runner, "2026-09-01T12:00:00.000Z")).toHaveLength(0); // not due yet
 

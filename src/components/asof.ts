@@ -1,33 +1,61 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { todayUTC } from "@/domain/timeline";
+import { parseRoute, supportsHistory } from "./routes";
 
 // The as-of date lives in the URL (`?asOf=YYYY-MM-DD`) so links and reloads keep it, and pages read
-// it through this hook so a scrub re-renders them without a page load. Nothing is stored in module
-// scope: the URL is the state, a DOM event is the change signal (same pattern as the runs bus).
+// it through this hook so a scrub re-renders them without a page load. A DOM event is the change
+// signal (same pattern as the runs bus). While the date moves fast (a drag, a held arrow key) the URL
+// trails it: browsers throttle history.replaceState, so the newest date waits in `pending` and pages
+// read that first.
 
 const EVENT = "asof:asof";
+const URL_DELAY_MS = 250;
 
-const read = () => new URLSearchParams(location.search).get("asOf") ?? undefined;
+let pending: { asOf: string | undefined } | null = null;
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+const fromUrl = () => new URLSearchParams(location.search).get("asOf") ?? undefined;
+const read = () => supportsHistory(parseRoute(location.pathname)) ? normalizeAsOf(pending ? pending.asOf : fromUrl()) : undefined;
+
+function writeUrl() {
+  if (!pending) return;
+  const url = new URL(location.href);
+  if (pending.asOf) url.searchParams.set("asOf", pending.asOf);
+  else url.searchParams.delete("asOf");
+  pending = null;
+  history.replaceState(history.state, "", url);
+}
+addEventListener("pagehide", writeUrl);
 
 const subscribe = (onChange: () => void) => {
+  const onPop = () => {
+    pending = null;
+    clearTimeout(timer);
+    onChange();
+  };
   document.addEventListener(EVENT, onChange);
-  window.addEventListener("popstate", onChange);
+  window.addEventListener("popstate", onPop);
   return () => {
     document.removeEventListener(EVENT, onChange);
-    window.removeEventListener("popstate", onChange);
+    window.removeEventListener("popstate", onPop);
   };
 };
 
-/** Today and later mean "now": no rewind. */
-export const normalizeAsOf = (date: string | undefined, today = todayUTC()) => (date && date < today ? date : undefined);
+/** Date-only today means now; an exact saved timestamp can select a decision made today. */
+export const normalizeAsOf = (date: string | undefined, today = todayUTC()) => {
+  if (!date || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?$/.test(date)) return undefined;
+  const time = Date.parse(date);
+  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== date.slice(0, 10)) return undefined;
+  return date.length === 10 ? (date < today ? date : undefined) : (time <= Date.now() ? new Date(time).toISOString() : undefined);
+};
 
-/** Rewrites `?asOf=` in place and tells every subscriber. Call on commit (release, click, key), not per pointer move. */
+/** Moves every page to `date` now and rewrites `?asOf=` once it settles. Safe to call per pointer move. */
 export function setAsOf(date: string | undefined): void {
-  const url = new URL(location.href);
   const next = normalizeAsOf(date);
-  if (next) url.searchParams.set("asOf", next);
-  else url.searchParams.delete("asOf");
-  history.replaceState(history.state, "", url);
+  if (next === read()) return;
+  pending = { asOf: next };
+  clearTimeout(timer);
+  timer = setTimeout(writeUrl, URL_DELAY_MS);
   document.dispatchEvent(new Event(EVENT));
 }
 

@@ -10,7 +10,6 @@ import { companyHypothesisPath, companyPath } from "./routes";
 import {
   api,
   CompanyAvatar,
-  formatConfidence,
   formatDateTime,
   formatDuration,
   JOB_LABELS,
@@ -49,13 +48,14 @@ function TargetCell({ target, label }: { target: RunTarget; label: ReturnType<ty
 }
 
 const JOB_HINTS: Record<Job, string> = {
-  research: "Finds and tags new evidence on the hypothesis with Exa Search. Takes seconds.",
-  assess: "Gives a verdict and how confident it is with Exa Agent, which may find more sources. Takes a few minutes and uses Agent credits.",
-  watch: "Collects what the company's Exa monitor has found on every hypothesis, starting the monitor on the first run.",
+  research: "Finds and tags new evidence with Exa Search. Takes seconds.",
+  assess: "Exa Agent researches the question and saves an assessment with sources.",
+  watch: "Collects what the company's Exa Monitor found across its hypotheses.",
 };
+const RUNNABLE_JOBS: Job[] = ["research", "assess"];
 
-const blank = (companyId = ""): RunTarget => ({ job: "research", companyId, hypothesisId: undefined });
-const isComplete = (t: RunTarget) => !!t.companyId && (t.job === "watch" || !!t.hypothesisId);
+const blank = (companyId = ""): RunTarget => ({ job: "assess", companyId, hypothesisId: undefined });
+const isComplete = (t: RunTarget) => !!t.companyId && !!t.hypothesisId;
 
 /** Job, company (unless fixed) and hypothesis (except for watch, which covers the whole company). */
 function TargetPicker({ value, onChange, company }: { value: RunTarget; onChange: (t: RunTarget) => void; company?: Company }) {
@@ -68,7 +68,7 @@ function TargetPicker({ value, onChange, company }: { value: RunTarget; onChange
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {(Object.keys(JOB_LABELS) as Job[]).map((j) => (
+          {RUNNABLE_JOBS.map((j) => (
             <SelectItem key={j} value={j}>
               {JOB_LABELS[j]}
             </SelectItem>
@@ -141,6 +141,7 @@ export function RunNow({ company, initial }: { company?: Company; initial?: RunT
 const isActive = (r: Run) => r.status === "queued" || r.status === "running";
 
 function RunResultCell({ run }: { run: Run }) {
+  const { companies } = usePortfolio();
   if (run.status === "failed") {
     return (
       <TableCell className="max-w-64 truncate text-destructive" title={run.error}>
@@ -148,11 +149,11 @@ function RunResultCell({ run }: { run: Run }) {
       </TableCell>
     );
   }
-  const a = run.result?.assessment;
+  const additions = run.result?.evidenceIds.map((id) => companies.flatMap(({ hypotheses }) => hypotheses.flatMap(({ evidence }) => evidence)).find((item) => item.id === id)).filter((item) => !!item) ?? [];
   return (
     <TableCell className="text-muted-foreground">
-      {run.result && `+${run.result.evidenceAdded} evidence`}
-      {a && ` · ${a.before.verdict} ${formatConfidence(a.before.confidence)} → ${a.after.verdict} ${formatConfidence(a.after.confidence)}`}
+      {run.result && <span>+{run.result.evidenceAdded} evidence{run.result.assessmentId && " · Research updated"}</span>}
+      {!!additions.length && <ul className="mt-1 max-w-72 list-disc pl-4 text-xs">{additions.map((item) => <li key={item.id} className="truncate"><a href={item.url} target="_blank" rel="noreferrer" className="underline">{item.title}</a></li>)}</ul>}
     </TableCell>
   );
 }
@@ -281,15 +282,13 @@ export function SchedulesTable({ company }: { company?: Company }) {
               <TableRow key={s.id} className={s.enabled ? undefined : "text-muted-foreground"}>
                 <TableCell>{JOB_LABELS[s.job]}</TableCell>
                 <TargetCell target={s} label={label} />
-                <TableCell>
-                  <IntervalSelect value={s.everyHours} onChange={(everyHours) => change(s, { everyHours })} />
-                </TableCell>
+                <TableCell>{s.job === "watch" ? "Hourly · managed from company" : <IntervalSelect value={s.everyHours} onChange={(everyHours) => change(s, { everyHours })} />}</TableCell>
                 <TableCell>{s.enabled ? formatDateTime(s.nextRunAt) : "Paused"}</TableCell>
                 <TableCell>
-                  <Switch checked={s.enabled} onCheckedChange={(enabled) => change(s, { enabled })} aria-label="Enabled" />
+                  <Switch checked={s.enabled} onCheckedChange={(enabled) => change(s, { enabled })} aria-label="Enabled" disabled={s.job === "watch"} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button size="icon" variant="ghost" onClick={() => remove(s)} aria-label="Delete schedule">
+                  <Button size="icon" variant="ghost" onClick={() => remove(s)} aria-label="Delete schedule" disabled={s.job === "watch"}>
                     <Trash2 />
                   </Button>
                 </TableCell>

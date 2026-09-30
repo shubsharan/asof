@@ -49,17 +49,25 @@ test("v2 turns per-company hypotheses into portfolio hypotheses and keys data by
     { id: "go-to-market", name: "Go to market", statement: "GTM works" },
   ]);
   const exa = getCompany(db, "exa")!.hypotheses.find((h) => h.id === "moat")!;
-  expect(exa.history.map((v) => [v.verdict, v.confidence])).toEqual([["supports", 74], ["contradicts", 36]]);
+  expect(exa.history).toEqual([]);
+  expect(exa.researchHistory?.map((v) => [v.verdict, v.confidence, v.origin])).toEqual([
+    ["supports", 74, "legacy"], ["contradicts", 36, "legacy"],
+  ]);
+  expect(exa.researchHistory?.map((v) => v.originalAsOf)).toEqual(["2026-03-01", "2026-06-04"]);
   expect(exa.evidence.map((e) => [e.id, e.companyId])).toEqual([["e1", "exa"]]);
+  expect(exa.evidence[0]).toMatchObject({ imported: true, review: undefined, reviewHistory: [] });
   expect(getCompany(db, "brave")!.hypotheses.map((h) => [h.id, h.verdict, h.evidence.length])).toEqual([
     ["moat", "untested", 1],
     ["go-to-market", "untested", 0],
   ]);
 
   expect(getRun(db, "r1")).toMatchObject({ job: "assess", hypothesisId: "moat", result: { evidenceAdded: 2 } });
-  expect(getRun(db, "r1")!.result!.assessment).toBeUndefined(); // recorded in the old vocabulary
+  expect(getRun(db, "r1")!.result!.proposalId).toBeUndefined(); // recorded before proposals existed
   expect(getRun(db, "r2")).toMatchObject({ job: "watch", hypothesisId: undefined });
-  expect(listSchedules(db)).toMatchObject([{ id: "s1", job: "research", companyId: "brave", hypothesisId: "moat" }]);
+  expect(listSchedules(db).find((schedule) => schedule.id === "s1")).toMatchObject({ job: "research", companyId: "brave", hypothesisId: "moat" });
+  expect(listSchedules(db).filter((schedule) => schedule.companyId === "exa" && schedule.job === "watch"))
+    .toMatchObject([{ enabled: true, everyHours: 1 }]);
+  expect(getCompany(db, "exa")!.watch).toMatchObject({ status: "watching", remoteMonitorId: "mon_1" });
   expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
 });
 
@@ -68,12 +76,23 @@ test("a database from before lenses (the frozen demo) migrates too, gaining runs
   migrate(db);
   expect(db.query("SELECT id FROM hypotheses ORDER BY rowid").all()).toEqual([{ id: "moat" }, { id: "go-to-market" }]);
   expect(db.query("SELECT count(*) AS n FROM runs").get()).toEqual({ n: 0 });
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 6 });
 });
 
 test("migrating is idempotent", () => {
   const db = oldDb();
   migrate(db);
   migrate(db);
+  expect(db.query("SELECT count(*) AS n FROM hypothesis_versions").get()).toEqual({ n: 0 });
+  expect(db.query("SELECT count(*) AS n FROM research_assessments").get()).toEqual({ n: 2 });
+});
+
+test("a later migration failure rolls back the entire version upgrade", () => {
+  const db = oldDb();
+  db.run("CREATE TABLE company_watches (block TEXT)");
+  expect(() => migrate(db)).toThrow();
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+  expect(db.query<{ name: string }, []>("PRAGMA table_info(hypotheses)").all().map((column) => column.name)).toContain("company_id");
+  expect(db.query<{ name: string }, []>("PRAGMA table_info(hypothesis_versions)").all().map((column) => column.name)).toContain("confidence");
   expect(db.query("SELECT count(*) AS n FROM hypothesis_versions").get()).toEqual({ n: 2 });
 });

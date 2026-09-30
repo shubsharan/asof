@@ -1,7 +1,7 @@
 import { compareThesis } from "@/domain/thesis";
 import type { Company, Hypothesis } from "@/domain/types";
 import { companyHypothesisPath } from "./routes";
-import { DIRECTION, formatConfidence, formatDate, VerdictBadge, withAsOf } from "./shared";
+import { DIRECTION, formatDate, formatDateTime, VerdictBadge, withAsOf } from "./shared";
 
 /**
  * The README's "Compare with today" table: what the thesis looked like on the as-of date beside what
@@ -10,13 +10,8 @@ import { DIRECTION, formatConfidence, formatDate, VerdictBadge, withAsOf } from 
 
 const count = (h: Hypothesis, type: string) => h.evidence.filter((e) => e.type === type).length;
 
-function Verdict({ h }: { h: Pick<Hypothesis, "verdict" | "confidence"> }) {
-  return (
-    <span className="inline-flex items-center gap-2 font-mono tabular-nums">
-      <VerdictBadge verdict={h.verdict} />
-      <span className="text-base font-semibold">{formatConfidence(h.confidence)}</span>
-    </span>
-  );
+function Verdict({ h }: { h: Pick<Hypothesis, "verdict"> }) {
+  return <VerdictBadge verdict={h.verdict} />;
 }
 
 const TH = "py-2 text-left text-xs font-medium text-muted-foreground";
@@ -31,14 +26,14 @@ export function CompanyCompare({ view, full, asOf }: { view: Company; full: Comp
         <thead>
           <tr>
             <th className={TH}>Compared with today</th>
-            <th className={`${TH} w-40`}>{formatDate(asOf)}</th>
+            <th className={`${TH} w-40`}>{asOf.length > 10 ? formatDateTime(asOf) : formatDate(asOf)}</th>
             <th className={`${TH} w-40`}>Today</th>
             <th className={`${TH} w-32 text-right`}>New since</th>
           </tr>
         </thead>
         <tbody>
           {changes.map((c) => {
-            const moved = c.before.confidence !== c.after.confidence || c.before.verdict !== c.after.verdict;
+            const moved = c.before.verdict !== c.after.verdict;
             return (
               <tr key={c.id} className={moved ? undefined : "text-muted-foreground"}>
                 <td className={`${TD} pr-4`}>
@@ -81,7 +76,7 @@ export function HypothesisCompare({ view, full, asOf }: { view: Hypothesis; full
         <thead>
           <tr>
             <th className={TH}>Compared with today</th>
-            <th className={`${TH} w-40`}>{formatDate(asOf)}</th>
+            <th className={`${TH} w-40`}>{asOf.length > 10 ? formatDateTime(asOf) : formatDate(asOf)}</th>
             <th className={`${TH} w-40`}>Today</th>
           </tr>
         </thead>

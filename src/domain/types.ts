@@ -3,6 +3,29 @@
  * evidence supports, contradicts or is neutral, and so is an assessment's verdict on the body of evidence.
  */
 export type Direction = "supports" | "neutral" | "contradicts";
+export type ReviewDecision = "relevant" | "irrelevant" | "disputed";
+
+export type EvidenceReview = {
+  id: number;
+  evidenceId: string;
+  decision: ReviewDecision;
+  note?: string;
+  reviewedAt: string;
+};
+
+export type SourceRelationship = "company" | "investor" | "customer-partner" | "independent" | "unknown";
+
+export type SourceVersion = {
+  id: string;
+  url: string;
+  retrievedAt: string;
+  status: "retrieved" | "unavailable";
+  contentHash?: string;
+  text?: string;
+  excerpt?: string;
+  grounding?: unknown;
+  error?: string;
+};
 
 export type Evidence = {
   id: string;
@@ -21,6 +44,17 @@ export type Evidence = {
   source: "search" | "agent" | "monitor";
   /** Why the source was judged credible, when the screening step recorded it. */
   sourceReasoning?: string;
+  /** True for evidence that existed before the review workflow was introduced. */
+  imported?: boolean;
+  review?: EvidenceReview;
+  reviewHistory?: EvidenceReview[];
+  sourceVersionId?: string;
+  sourceVersion?: SourceVersion;
+  excerpt?: string;
+  verificationGap?: string;
+  relationship: SourceRelationship;
+  relationshipAutomated: boolean;
+  groupId?: string;
 };
 
 /**
@@ -28,15 +62,52 @@ export type Evidence = {
  * Always cites at least one piece of evidence.
  */
 export type HypothesisVersion = {
+  id?: number;
   asOf: string;
   /** Which way the credible evidence points, on balance. */
   verdict: Direction;
   /** How confident the assessor is in that verdict, 0–100. Not the probability the hypothesis is true. */
-  confidence: number;
+  /** Present on model research. Official analyst assessments do not carry model confidence. */
+  confidence?: number;
   reasoning: string;
   evidenceIds: string[];
   /** What would most change the assessment. */
   openQuestions: string[];
+  reviewedEvidenceIds?: string[];
+  reviewedEvidenceReviewIds?: number[];
+  proposalId?: string;
+};
+
+export type ResearchAssessment = Omit<HypothesisVersion, "id" | "confidence" | "reviewedEvidenceIds" | "proposalId"> & {
+  id: number;
+  /** The historical cutoff for a reconstruction. */
+  targetDate?: string;
+  /** When AsOf actually recorded it. Unknown for date-only legacy rows. */
+  recordedAt?: string;
+  origin: "legacy" | "reconstruction" | "agent";
+  confidence: number;
+  /** The date field carried by a legacy row, without claiming what event it timed. */
+  originalAsOf?: string;
+};
+
+export type ProposalStatus = "pending" | "accepted" | "dismissed";
+
+export type AssessmentProposal = {
+  id: string;
+  companyId: string;
+  hypothesisId: string;
+  status: ProposalStatus;
+  verdict: Direction;
+  confidence: number;
+  reasoning: string;
+  openQuestions: string[];
+  evidenceIds: string[];
+  inputEvidenceIds: string[];
+  startingAssessmentId?: number;
+  providerRunId: string;
+  rawOutput: unknown;
+  grounding?: unknown;
+  createdAt: string;
 };
 
 /** A hypothesis the whole portfolio is tracked on, e.g. "moat". */
@@ -49,6 +120,11 @@ export type Hypothesis = PortfolioHypothesis & {
   confidence?: number;
   evidence: Evidence[];
   history: HypothesisVersion[];
+  researchHistory?: ResearchAssessment[];
+  pendingProposals?: AssessmentProposal[];
+  reviewCounts?: { unreviewed: number; relevant: number; irrelevant: number; disputed: number; pending: number };
+  reportCount: number;
+  developmentCount: number;
 };
 
 export type Company = {
@@ -58,8 +134,24 @@ export type Company = {
   domain: string;
   /** Exa Agent Monitor tracking this company, once created. */
   monitorId?: string;
+  watch?: WatchState;
   /** Every portfolio hypothesis, in portfolio order. */
   hypotheses: Hypothesis[];
+};
+
+export type WatchStatus = "stopped" | "starting" | "watching" | "stop-failed";
+export type WatchState = {
+  companyId: string;
+  status: WatchStatus;
+  remoteMonitorId?: string;
+  idempotencyKey: string;
+  collectionScheduleId?: string;
+  lastCollectedAt?: string;
+  latestFailure?: { at: string; message: string };
+  remoteStatus?: "creating" | "pending_first_refresh" | "active";
+  remoteRefresh?: { state: "idle" } | { state: "running"; startedAt: string; entitiesProcessed: number; entitiesTotal: number };
+  lastRemoteRefreshAt?: string;
+  remoteInspectionFailure?: { at: string; message: string };
 };
 
 /**
@@ -74,12 +166,12 @@ export type RunTrigger = "manual" | "schedule";
 /** What a run is aimed at: a company's hypothesis for research and assess, the whole company for watch. */
 export type RunTarget = { job: Job; companyId: string; hypothesisId?: string };
 
-type Assessed = Pick<Hypothesis, "verdict" | "confidence">;
-
 export type RunResult = {
   evidenceAdded: number;
-  /** Set by assess runs. */
-  assessment?: { before: Assessed; after: Assessed };
+  evidenceIds: string[];
+  /** Legacy runs may reference a stored proposal. */
+  proposalId?: string;
+  assessmentId?: number;
 };
 
 export type Run = RunTarget & {

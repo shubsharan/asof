@@ -1,21 +1,18 @@
-import { useMemo } from "react";
-import { timeDomain } from "@/domain/timeline";
 import { useAsOf } from "./asof";
 import { companyHypothesisPath, hypothesisPath } from "./routes";
 import { CompanyAvatar, withAsOf } from "./shared";
-import { SliceChart } from "./SliceChart";
 import { companyRows } from "./sliceRows";
 import { StripRow } from "./StripRow";
+import { SliceChartCard } from "./SliceChartCard";
 import { usePortfolio } from "./usePortfolio";
+import { HistoryControls } from "./TimeScrubber";
 
 /**
- * One portfolio hypothesis across every company on the shared time axis. Without one, every
- * hypothesis in turn. Companies never assessed on it are listed, not drawn.
+ * One portfolio hypothesis across every company, or every hypothesis in turn.
  */
 export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
   const { hypotheses, companies, companiesAsOf, loaded } = usePortfolio();
-  const { asOf, setAsOf, today } = useAsOf();
-  const domain = useMemo(() => timeDomain(companies, today), [companies, today]);
+  const { asOf } = useAsOf();
   if (!loaded) return null;
 
   const shown = hypothesisId ? hypotheses.filter((ph) => ph.id === hypothesisId) : hypotheses;
@@ -25,8 +22,9 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
     <>
       <h1 className="text-2xl font-semibold">{hypothesisId ? shown[0]!.statement : "Hypotheses"}</h1>
       <p className="text-muted-foreground">
-        {hypothesisId ? "This hypothesis across the portfolio." : "Each hypothesis across the portfolio, on one time axis."}
+        {hypothesisId ? "This hypothesis across the portfolio." : "Exa research across companies."}
       </p>
+      <HistoryControls hypothesisId={hypothesisId} />
 
       {shown.map((ph) => {
         const rows = companiesAsOf.flatMap((view, i) => {
@@ -34,8 +32,7 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
           const full = companies[i]!.hypotheses.find((x) => x.id === ph.id);
           return h && full ? [{ company: view, h, full }] : [];
         });
-        const drawn = rows.filter((r) => r.full.history.length > 0);
-        const untested = rows.filter((r) => r.full.history.length === 0);
+        const researchRows = companyRows(companies, ph.id);
 
         return (
           <section key={ph.id} className="mt-10">
@@ -46,21 +43,22 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
                 </a>
               </h2>
             )}
-            {hypothesisId && (
-              <div className="mb-8">
-                <SliceChart
-                  rows={companyRows(companies, ph.id)}
-                  asOf={asOf}
-                  today={today}
-                  onPickDate={setAsOf}
-                  avatar={(rowId) => {
-                    const c = companies.find((x) => x.id === rowId);
-                    return c ? <CompanyAvatar company={c} /> : null;
-                  }}
-                />
-              </div>
+            {hypothesisId && researchRows.length > 0 && (
+              <details className="mb-8 rounded border p-4">
+                <summary className="cursor-pointer font-medium">Research over time</summary>
+                <p className="mt-2 text-sm text-muted-foreground">How Exa's assessments changed. Historical reconstructions use their research cutoff dates.</p>
+                <div className="mt-4">
+                  <SliceChartCard
+                    rows={researchRows}
+                    avatar={(rowId) => {
+                      const c = companies.find((x) => x.id === rowId);
+                      return c ? <CompanyAvatar company={c} className="size-4" /> : null;
+                    }}
+                  />
+                </div>
+              </details>
             )}
-            {drawn.map(({ company, h, full }) => (
+            {rows.map(({ company, h, full }) => (
               <StripRow
                 key={company.id}
                 title={company.name}
@@ -68,29 +66,12 @@ export function Hypotheses({ hypothesisId }: { hypothesisId?: string }) {
                 href={companyHypothesisPath(company.id, h.id)}
                 hypothesis={h}
                 full={full}
-                domain={domain}
                 asOf={asOf}
-                today={today}
               />
             ))}
-            {untested.length > 0 && (
-              <p className="border-t py-4 text-sm text-muted-foreground">
-                Not assessed yet:{" "}
-                {untested.map(({ company, h }, i) => (
-                  <span key={company.id}>
-                    {i > 0 && ", "}
-                    <a href={withAsOf(companyHypothesisPath(company.id, h.id), asOf)} className="underline-offset-2 hover:underline">
-                      {company.name}
-                    </a>
-                  </span>
-                ))}
-                .
-              </p>
-            )}
           </section>
         );
       })}
     </>
   );
 }
-

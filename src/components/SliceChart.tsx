@@ -1,16 +1,19 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { bounds, columnU, ISO, leanV, panelCorners, planeWidth, project, sliceW, toPoints, type Point } from "@/domain/isometric";
 import { buildSlices, cursorSlice, sliceDays, type Marker, type Slice, type SliceCell, type SliceRow, type StackKey } from "@/domain/slices";
-import { DIRECTION, formatDate, withAsOf } from "./shared";
-import { useWidth } from "./useWidth";
+import { DIRECTION, formatDate } from "./shared";
 
 /**
- * Hypotheses over time as a stack of isometric slices, one per assessment day. Each row has a column;
- * its assessment sits at its lean (signed confidence: up supports, down contradicts) and the evidence
- * that became knowable since the previous slice stacks around the zero line. Trails join a row's
- * markers across slices. The slice on the cursor is emphasized; clicking a slice moves the cursor.
+ * Hypotheses over time as a stack of isometric slices, one per assessment day, oldest bottom-left and
+ * newest top-right. Each row has a column; its assessment sits at its lean (signed confidence: up
+ * supports, down contradicts) and the evidence that became knowable since the previous slice stacks
+ * around the zero line. Trails join a row's markers across slices. The slice on the cursor is
+ * emphasized; clicking a slice moves the cursor.
  *
- * Renders nothing until a row has been assessed. Draws back-to-front so the newest slice occludes.
+ * The chart carries no text: `SliceLegend` explains the marks and the row legend under the chart names
+ * the columns in their left-to-right order. Hovering a row in either place singles out its column.
+ * Scales to its container's width, capped in height. Renders nothing until a row has been assessed.
+ * Draws oldest first so the newest slice is in front.
  */
 type Props = {
   rows: SliceRow[];
@@ -21,62 +24,79 @@ type Props = {
   avatar?: (rowId: string) => ReactNode;
 };
 
-const MIN_WIDTH = 640;
-const LABEL_WIDTH = 140;
-const LABEL_HEIGHT = 24;
-
 export function SliceChart({ rows, asOf, today, onPickDate, avatar }: Props) {
-  const [ref, width] = useWidth<HTMLDivElement>();
+  const [focus, setFocus] = useState<string>();
   const days = useMemo(() => sliceDays(rows), [rows]);
   const slices = useMemo(() => buildSlices(rows, days), [rows, days]);
   if (days.length === 0) return null;
 
   const cursor = cursorSlice(days, asOf, today);
   const box = bounds(rows.length, days.length);
-  const height = (box.height / box.width) * width;
 
   return (
-    <div className="overflow-x-auto">
-      <div ref={ref} style={{ minWidth: MIN_WIDTH }}>
-        {width > 0 && (
-          <svg viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} width={width} height={height} className="block">
-            {slices.map((slice, k) => (
-              <g key={slice.day}>
-                <Panel slice={slice} k={k} rows={rows} active={slice.day === cursor} asOf={asOf} onPick={onPickDate} />
-                {k < slices.length - 1 && <Trails from={slice} to={slices[k + 1]!} k={k} rows={rows} />}
-              </g>
-            ))}
-            <ColumnLabels rows={rows} k={slices.length - 1} asOf={asOf} avatar={avatar} />
-          </svg>
-        )}
-        <p className="mt-2 text-xs text-muted-foreground">
-          Filled dot: assessed that day. Hollow: carried from an earlier assessment. Halo: confidence. Small dots: evidence new since the previous slice, up from the line supports, down contradicts.
-        </p>
-      </div>
+    <div>
+      <svg
+        viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
+        className="mx-auto block h-auto max-h-[360px] w-full"
+        role="img"
+        aria-label={`${rows.length} rows over ${days.length} assessment days`}
+      >
+        {slices.map((slice, k) => (
+          <g key={slice.day}>
+            <Panel slice={slice} k={k} rows={rows} cursor={cursor} focus={focus} onFocus={setFocus} onPick={onPickDate} />
+            {k < slices.length - 1 && <Trails from={slice} to={slices[k + 1]!} k={k} rows={rows} cursor={cursor} focus={focus} />}
+          </g>
+        ))}
+      </svg>
+      <RowLegend rows={rows} avatar={avatar} focus={focus} onFocus={setFocus} />
     </div>
   );
 }
 
-function Panel({ slice, k, rows, active, asOf, onPick }: { slice: Slice; k: number; rows: SliceRow[]; active: boolean; asOf?: string; onPick: (day: string) => void }) {
+/** Neutral and unclassified dots along the zero line before the rest collapses into "+N", so they stay inside the column. */
+const ALONG_CAP = 10;
+
+/** Slices before the cursor are dimmed; slices after it weren't known yet, so they're dimmer. */
+const dimClass = (day: string, cursor: string | undefined) => (cursor === undefined || day > cursor ? "opacity-25" : day < cursor ? "opacity-60" : "");
+
+/** Every row but the hovered one fades. */
+const dim = (focus: string | undefined, id: string) => `transition-opacity ${focus && focus !== id ? "opacity-15" : ""}`;
+
+function Panel({
+  slice,
+  k,
+  rows,
+  cursor,
+  focus,
+  onFocus,
+  onPick,
+}: {
+  slice: Slice;
+  k: number;
+  rows: SliceRow[];
+  cursor: string | undefined;
+  focus?: string;
+  onFocus: (rowId?: string) => void;
+  onPick: (day: string) => void;
+}) {
   const w = sliceW(k);
   const [z0, z1] = [project(0, 0, w), project(planeWidth(rows.length), 0, w)];
-  const topRight = project(0, ISO.planeHeight / 2, w);
+  const active = slice.day === cursor;
   return (
-    <g className={active ? undefined : "opacity-60"}>
+    <g className={dimClass(slice.day, cursor) || undefined}>
       <polygon
         points={toPoints(panelCorners(rows.length, k))}
         className={`cursor-pointer fill-foreground/[0.04] ${active ? "stroke-foreground" : "stroke-border"}`}
         strokeWidth={active ? 1.5 : 1}
         onClick={() => onPick(slice.day)}
       >
-        <title>{`Set the cursor to ${formatDate(slice.day)}`}</title>
+        <title>{`${formatDate(slice.day)}. Click to set the cursor here.`}</title>
       </polygon>
-      <line x1={z0.x} y1={z0.y} x2={z1.x} y2={z1.y} className="stroke-border" strokeDasharray="3 3" />
-      <text x={topRight.x + 6} y={topRight.y - 6} className={`font-mono text-[11px] ${active ? "fill-foreground" : "fill-muted-foreground"}`}>
-        {formatDate(slice.day)}
-      </text>
+      <line x1={z0.x} y1={z0.y} x2={z1.x} y2={z1.y} className="pointer-events-none stroke-border" strokeDasharray="3 3" />
       {slice.cells.map((cell, i) => (
-        <Column key={cell.rowId} cell={cell} row={rows[i]!} u={columnU(i)} w={w} asOf={asOf} />
+        <g key={cell.rowId} className={dim(focus, cell.rowId)} onMouseEnter={() => onFocus(cell.rowId)} onMouseLeave={() => onFocus(undefined)}>
+          <Column cell={cell} row={rows[i]!} u={columnU(i)} w={w} />
+        </g>
       ))}
     </g>
   );
@@ -89,40 +109,48 @@ const STACK_FILL: Record<StackKey, string> = {
   unclassified: DIRECTION.unclassified.fill,
 };
 
-function Column({ cell, row, u, w, asOf }: { cell: SliceCell; row: SliceRow; u: number; w: number; asOf?: string }) {
+function Column({ cell, row, u, w }: { cell: SliceCell; row: SliceRow; u: number; w: number }) {
   const { supports, contradicts, neutral, unclassified } = cell.evidence;
   const dots: { p: Point; key: StackKey; title: string; id: string }[] = [];
   supports.shown.forEach((e, j) => dots.push({ p: project(u, (j + 1) * ISO.dotPitch, w), key: "supports", title: e.title, id: e.id }));
   contradicts.shown.forEach((e, j) => dots.push({ p: project(u, -(j + 1) * ISO.dotPitch, w), key: "contradicts", title: e.title, id: e.id }));
-  const along = [...neutral.shown.map((e) => ({ e, key: "neutral" as StackKey })), ...unclassified.shown.map((e) => ({ e, key: "unclassified" as StackKey }))];
-  along.forEach(({ e, key }, j) => dots.push({ p: project(u + (j - (along.length - 1) / 2) * ISO.dotPitch, 0, w), key, title: e.title, id: e.id }));
+  const alongAll = [...neutral.shown.map((e) => ({ e, key: "neutral" as StackKey })), ...unclassified.shown.map((e) => ({ e, key: "unclassified" as StackKey }))];
+  const alongShown = alongAll.slice(0, ALONG_CAP);
+  const alongOverflow = alongAll.length - alongShown.length + neutral.overflow + unclassified.overflow;
+  alongShown.forEach(({ e, key }, j) => dots.push({ p: project(u + (j - (alongShown.length - 1) / 2) * ISO.dotPitch, 0, w), key, title: e.title, id: e.id }));
 
   const upOverflow = supports.overflow > 0 && project(u, (supports.shown.length + 1) * ISO.dotPitch + 8, w);
   const downOverflow = contradicts.overflow > 0 && project(u, -((contradicts.shown.length + 1) * ISO.dotPitch + 8), w);
+  const alongOverflowPoint = alongOverflow > 0 && project(u - ((alongShown.length + 1) / 2) * ISO.dotPitch - 6, 0, w);
 
   return (
     <g>
       {dots.map((d) => (
-        <circle key={d.id} cx={d.p.x} cy={d.p.y} r={ISO.dotRadius} className={STACK_FILL[d.key]}>
+        <circle key={d.id} cx={d.p.x} cy={d.p.y} r={ISO.dotRadius} className={`pointer-events-none ${STACK_FILL[d.key]}`}>
           <title>{d.title}</title>
         </circle>
       ))}
       {upOverflow && (
-        <text x={upOverflow.x} y={upOverflow.y} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
+        <text x={upOverflow.x} y={upOverflow.y} textAnchor="middle" className="pointer-events-none fill-muted-foreground font-mono text-[9px]">
           +{supports.overflow}
         </text>
       )}
       {downOverflow && (
-        <text x={downOverflow.x} y={downOverflow.y + 6} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
+        <text x={downOverflow.x} y={downOverflow.y + 6} textAnchor="middle" className="pointer-events-none fill-muted-foreground font-mono text-[9px]">
           +{contradicts.overflow}
         </text>
       )}
-      {cell.marker && <MarkerDot marker={cell.marker} row={row} p={project(u, leanV(cell.marker.lean), w)} asOf={asOf} />}
+      {alongOverflowPoint && (
+        <text x={alongOverflowPoint.x} y={alongOverflowPoint.y} textAnchor="start" dominantBaseline="middle" className="pointer-events-none fill-muted-foreground font-mono text-[9px]">
+          +{alongOverflow}
+        </text>
+      )}
+      {cell.marker && <MarkerDot marker={cell.marker} row={row} p={project(u, leanV(cell.marker.lean), w)} />}
     </g>
   );
 }
 
-function MarkerDot({ marker: m, row, p, asOf }: { marker: Marker; row: SliceRow; p: Point; asOf?: string }) {
+function MarkerDot({ marker: m, row, p }: { marker: Marker; row: SliceRow; p: Point }) {
   const tone = DIRECTION[m.verdict];
   const halo = ISO.markerRadius + (ISO.haloMax * m.confidence) / 100;
   const dot = (
@@ -136,12 +164,12 @@ function MarkerDot({ marker: m, row, p, asOf }: { marker: Marker; row: SliceRow;
       <title>{`${row.label}, ${formatDate(m.asOf)}: ${m.verdict}, ${m.confidence}% confident${m.fresh ? "" : " (carried, not reassessed this day)"}`}</title>
     </g>
   );
-  return row.href ? <a href={withAsOf(row.href, asOf)}>{dot}</a> : dot;
+  return row.href ? <a href={row.href}>{dot}</a> : dot;
 }
 
-function Trails({ from, to, k, rows }: { from: Slice; to: Slice; k: number; rows: SliceRow[] }) {
+function Trails({ from, to, k, rows, cursor, focus }: { from: Slice; to: Slice; k: number; rows: SliceRow[]; cursor: string | undefined; focus?: string }) {
   return (
-    <>
+    <g className={dimClass(to.day, cursor) || undefined}>
       {rows.map((row, i) => {
         const a = from.cells[i]!.marker;
         const b = to.cells[i]!.marker;
@@ -156,36 +184,74 @@ function Trails({ from, to, k, rows }: { from: Slice; to: Slice; k: number; rows
             y1={p.y}
             x2={q.x}
             y2={q.y}
-            className={flipped ? DIRECTION[b.verdict].stroke : "stroke-muted-foreground/40"}
+            className={`${flipped ? DIRECTION[b.verdict].stroke : "stroke-muted-foreground/40"} ${dim(focus, row.id)}`}
             strokeWidth={flipped ? 2 : 1.25}
           />
         );
       })}
-    </>
+    </g>
   );
 }
 
-/** Row labels along the base of the front slice, each below and to the right of its column. */
-function ColumnLabels({ rows, k, asOf, avatar }: { rows: SliceRow[]; k: number; asOf?: string; avatar?: (rowId: string) => ReactNode }) {
+/** Names the columns in their left-to-right order; hovering one singles out its column in the chart. */
+function RowLegend({ rows, avatar, focus, onFocus }: { rows: SliceRow[]; avatar?: (rowId: string) => ReactNode; focus?: string; onFocus: (rowId?: string) => void }) {
   return (
-    <>
-      {rows.map((row, i) => {
-        const p = project(columnU(i), -ISO.planeHeight / 2, sliceW(k));
+    <ul className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">
+      {rows.map((row) => {
+        const label = (
+          <>
+            {avatar?.(row.id)}
+            <span>{row.label}</span>
+          </>
+        );
+        const cls = `flex items-center gap-1.5 transition-colors ${focus && focus !== row.id ? "text-muted-foreground" : ""}`;
+        const hover = { onMouseEnter: () => onFocus(row.id), onMouseLeave: () => onFocus(undefined), onFocus: () => onFocus(row.id), onBlur: () => onFocus(undefined) };
         return (
-          <foreignObject key={row.id} x={p.x + 8} y={p.y + 2} width={LABEL_WIDTH} height={LABEL_HEIGHT}>
-            <div className="flex h-full items-center justify-start gap-1.5 text-xs">
-              {avatar?.(row.id)}
-              {row.href ? (
-                <a href={withAsOf(row.href, asOf)} className="truncate hover:underline">
-                  {row.label}
-                </a>
-              ) : (
-                <span className="truncate">{row.label}</span>
-              )}
-            </div>
-          </foreignObject>
+          <li key={row.id}>
+            {row.href ? (
+              <a href={row.href} className={`${cls} underline-offset-2 hover:underline`} {...hover}>
+                {label}
+              </a>
+            ) : (
+              <span className={cls} {...hover}>
+                {label}
+              </span>
+            )}
+          </li>
         );
       })}
-    </>
+    </ul>
+  );
+}
+
+/** What the marks mean: colour is the verdict, fill is freshness, the halo is confidence. */
+export function SliceLegend() {
+  const swatch = (children: ReactNode) => (
+    <svg viewBox="-8 -8 16 16" className="size-4 shrink-0 overflow-visible" aria-hidden>
+      {children}
+    </svg>
+  );
+  const verdicts = (["supports", "neutral", "contradicts"] as const).map((d) => [d, swatch(<circle r={4} className={DIRECTION[d].fill} />)] as const);
+  const marks = [
+    ["assessed", swatch(<circle r={4} className="fill-foreground/70" />)],
+    ["carried", swatch(<circle r={3.5} className="fill-background stroke-foreground/70" strokeWidth={1.5} />)],
+    ["confidence", swatch(<><circle r={7.5} className="fill-foreground/15" /><circle r={3} className="fill-foreground/70" /></>)],
+    ["new evidence", swatch(<>{[-5, 0, 5].map((y) => <circle key={y} cy={y} r={1.5} className="fill-foreground/50" />)}</>)],
+  ] as const;
+  const group = (items: readonly (readonly [string, ReactNode])[]) => (
+    <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {items.map(([label, icon]) => (
+        <li key={label} className="flex items-center gap-1">
+          {icon}
+          {label}
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+      {group(verdicts)}
+      {group(marks)}
+    </div>
   );
 }

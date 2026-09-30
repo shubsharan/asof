@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { addDays, assessmentDays, binTicks, evidenceTicks, scale, stepSegments, timeDomain } from "../domain/timeline";
+import { addDays, assessmentDays, binTicks, calendarTicks, evidenceTicks, scale, stepSegments, timeDomain } from "../domain/timeline";
 import type { Company, Evidence, HypothesisVersion } from "../domain/types";
 
 const version = (asOf: string, confidence: number, verdict: HypothesisVersion["verdict"] = "supports"): HypothesisVersion => ({
@@ -22,25 +22,27 @@ const ev = (id: string, publishedAt: string | undefined, discoveredAt = "2026-09
   discoveredAt,
   type: "supports",
   source: "search",
+  relationship: "unknown",
+  relationshipAutomated: true,
 });
 
 const company = (id: string, hypotheses: Company["hypotheses"]): Company => ({ id, name: id, description: "", domain: "", hypotheses });
 
 const acme = company("acme", [
-  { id: "moat", name: "Moat", statement: "Moat is strengthening", verdict: "untested", history: [version("2026-03-01T15:00:00Z", 81), version("2026-06-04", 58, "contradicts")], evidence: [ev("old", "2025-01-01"), ev("feb", "2026-02-10"), ev("undated", undefined)] },
-  { id: "adoption", name: "Adoption", statement: "Adoption is accelerating", verdict: "untested", history: [], evidence: [] },
+  { id: "moat", name: "Moat", statement: "Moat is strengthening", verdict: "untested", reportCount: 0, developmentCount: 0, history: [version("2026-03-01T15:00:00Z", 81), version("2026-06-04", 58, "contradicts")], evidence: [ev("old", "2025-01-01"), ev("feb", "2026-02-10"), ev("undated", undefined)] },
+  { id: "adoption", name: "Adoption", statement: "Adoption is accelerating", verdict: "untested", reportCount: 0, developmentCount: 0, history: [], evidence: [] },
 ]);
 const beta = company("beta", [
-  { id: "adoption", name: "Adoption", statement: "Adoption is accelerating", verdict: "untested", history: [version("2026-01-12", 40, "neutral")], evidence: [] },
+  { id: "adoption", name: "Adoption", statement: "Adoption is accelerating", verdict: "untested", reportCount: 0, developmentCount: 0, history: [version("2026-01-12", 40, "neutral")], evidence: [] },
 ]);
 
-test("timeDomain starts 45 days before the first assessment and ends today", () => {
-  expect(timeDomain([acme, beta], "2026-09-25")).toEqual(["2025-11-28", "2026-09-25"]);
+test("timeDomain starts 45 days before the first assessment, knots every assessment day, and ends today", () => {
+  expect(timeDomain([acme, beta], "2026-09-25")).toEqual(["2025-11-28", "2026-01-12", "2026-03-01", "2026-06-04", "2026-09-25"]);
 });
 
 test("timeDomain stretches to data dated after today, and falls back to a year when nothing is assessed", () => {
-  const late = company("late", [{ id: "x", name: "X", statement: "", verdict: "untested", history: [version("2026-10-02T01:00:00Z", 50)], evidence: [] }]);
-  expect(timeDomain([late], "2026-09-25")).toEqual(["2026-08-18", "2026-10-02"]);
+  const late = company("late", [{ id: "x", name: "X", statement: "", verdict: "untested", reportCount: 0, developmentCount: 0, history: [version("2026-10-02T01:00:00Z", 50)], evidence: [] }]);
+  expect(timeDomain([late], "2026-09-25")).toEqual(["2026-08-18", "2026-09-25", "2026-10-02"]);
   expect(timeDomain([company("empty", [])], "2026-09-25")).toEqual(["2025-09-25", "2026-09-25"]);
 });
 
@@ -54,9 +56,25 @@ test("scale maps days to pixels and back, clamping at both ends", () => {
   expect(s.day(500)).toBe("2026-01-11");
 });
 
-test("assessmentDays are distinct portfolio-wide days before today, oldest first", () => {
+test("scale gives every gap between checkpoints the same width, and the lead-in half of one", () => {
+  // Gaps of 4, 1 and 26 days over 250px: the lead-in is 50px, then 100px per gap.
+  const s = scale(["2026-01-01", "2026-01-05", "2026-01-06", "2026-02-01"], 250);
+  expect(["2026-01-01", "2026-01-03", "2026-01-05", "2026-01-06", "2026-01-19", "2026-02-01"].map(s.x)).toEqual([0, 25, 50, 150, 200, 250]);
+  expect([0, 25, 50, 150, 200, 250].map(s.day)).toEqual(["2026-01-01", "2026-01-03", "2026-01-05", "2026-01-06", "2026-01-19", "2026-02-01"]);
+});
+
+test("assessmentDays are distinct portfolio-wide days up to today, oldest first", () => {
   expect(assessmentDays([acme, beta], "2026-09-25")).toEqual(["2026-01-12", "2026-03-01", "2026-06-04"]);
-  expect(assessmentDays([acme, beta], "2026-03-01")).toEqual(["2026-01-12"]);
+  expect(assessmentDays([acme, beta], "2026-03-01")).toEqual(["2026-01-12", "2026-03-01"]);
+});
+
+test("calendarTicks mark Mondays everywhere and days only where they're wide enough", () => {
+  // 2026-01-05 is a Monday. The lead-in (4 days) is 50px, 12.5px a day; the gap (28 days) 100px, 3.6px a day.
+  const ticks = calendarTicks(["2026-01-01", "2026-01-05", "2026-02-02"], 150);
+  const days = ticks.filter((t) => !t.week).map((t) => t.day);
+  const weeks = ticks.filter((t) => t.week).map((t) => t.day);
+  expect(days).toEqual(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]);
+  expect(weeks).toEqual(["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02"]);
 });
 
 test("stepSegments hold each assessment until the next, and the last until the end of the domain", () => {
@@ -70,10 +88,12 @@ test("stepSegments hold each assessment until the next, and the last until the e
 test("evidenceTicks place evidence by knownAt and bucket anything before the domain", () => {
   const { ticks, earlier } = evidenceTicks(acme.hypotheses[0]!.evidence, ["2025-11-28", "2026-09-25"]);
   expect(ticks).toEqual([
-    { id: "feb", at: "2026-02-10", type: "supports" },
+    { id: "old", at: "2026-09-20", type: "supports" },
+    { id: "feb", at: "2026-09-20", type: "supports" },
     { id: "undated", at: "2026-09-20", type: "supports" },
   ]);
-  expect(earlier.map((e) => e.id)).toEqual(["old"]);
+  expect(earlier).toEqual([]);
+  expect(evidenceTicks([ev("recorded-earlier", "2025-01-01", "2025-02-01")], ["2025-11-28", "2026-09-25"]).earlier).toHaveLength(1);
 });
 
 test("addDays works in UTC days", () => {

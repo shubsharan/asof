@@ -9,11 +9,8 @@ import { Portfolio } from "./Portfolio";
 import { ResearchSheet } from "./ResearchSheet";
 import { parseRoute, type Route } from "./routes";
 import { Settings } from "./Settings";
-import { useAsOf } from "./asof";
-import { formatDate, useApi, usePolling, useRunsChanged } from "./shared";
-import { TimeScrubber } from "./TimeScrubber";
 import { Updates } from "./Updates";
-import { PortfolioProvider } from "./usePortfolio";
+import { PortfolioProvider, usePortfolio } from "./usePortfolio";
 
 export function App() {
   return (
@@ -25,42 +22,23 @@ export function App() {
 
 function Shell() {
   const route = parseRoute(location.pathname);
-  const { data: activeRuns, reload: reloadRuns } = useApi<Run[]>("/api/runs?active=1");
-  usePolling(reloadRuns, 5000, !!activeRuns?.length);
-  useRunsChanged(reloadRuns);
-  const { asOf, setAsOf } = useAsOf();
+  const { activeRuns } = usePortfolio();
 
   return (
     // Every link is a full page load, so restore the collapsed state the sidebar saved in its cookie.
     <SidebarProvider defaultOpen={!document.cookie.includes("sidebar_state=false")}>
-      <AppSidebar route={route} activeRuns={activeRuns?.length ?? 0} />
+      <AppSidebar route={route} activeRuns={activeRuns.length} />
       <SidebarInset className="min-w-0">
-        <header className={`sticky top-0 z-10 border-b backdrop-blur ${asOf ? "bg-amber-50/95" : "bg-background/95"}`}>
+        <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
           <div className="mx-auto w-full max-w-6xl px-6">
-            <TimeScrubber
-              leading={
-                <>
-                  <SidebarTrigger className="-ml-1" />
-                  <Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
-                </>
-              }
-            />
-          </div>
-          {asOf && (
-            <div className="border-t border-amber-200 bg-amber-100/80 text-amber-950">
-              <p className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-6 py-1.5 text-sm">
-                <span>
-                  Viewing AsOf as of <strong className="font-semibold">{formatDate(asOf)}</strong>. Everything that became knowable after that day is hidden or dimmed.
-                </span>
-                <button type="button" onClick={() => setAsOf(undefined)} className="font-medium underline underline-offset-2">
-                  Back to today
-                </button>
-              </p>
+            <div className="flex h-12 items-center gap-2">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
             </div>
-          )}
+          </div>
         </header>
         <main className="mx-auto w-full max-w-6xl p-6">
-          <Page route={route} activeRuns={activeRuns ?? []} />
+          <Page route={route} activeRuns={activeRuns} />
         </main>
       </SidebarInset>
       <ResearchSheet />

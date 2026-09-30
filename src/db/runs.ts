@@ -157,6 +157,16 @@ export function createSchedule(
 ): Schedule {
   checkTarget(s);
   if (!(s.everyHours > 0)) throw new Error("A schedule needs a positive interval");
+  if (s.job === "watch") {
+    const active = db.query<{ monitor_id: string | null; status: string | null }, [string]>(`SELECT w.monitor_id, w.status
+      FROM companies c LEFT JOIN company_watches w ON w.company_id = c.id WHERE c.id = ?`).get(s.companyId);
+    if (!active?.monitor_id || (active.status !== "watching" && active.status !== "stop-failed")) {
+      throw new Error(`Company ${s.companyId} is not being watched`);
+    }
+    const existing = db.query<ScheduleRow, [string]>("SELECT * FROM schedules WHERE company_id = ? AND job = 'watch' ORDER BY rowid LIMIT 1").get(s.companyId);
+    if (existing) return updateSchedule(db, existing.id, { enabled: true, everyHours: 1 }, now)!;
+    s = { ...s, everyHours: 1 };
+  }
   const row = db
     .query<ScheduleRow, Record<string, string | number | null>>(
       `INSERT INTO schedules (id, job, company_id, hypothesis_id, every_hours, enabled, next_run_at, created_at)
@@ -171,6 +181,7 @@ export function createSchedule(
       next: later(now, s.everyHours),
       now,
     })!;
+  if (s.job === "watch") db.query("UPDATE company_watches SET collection_schedule_id = ?, updated_at = ? WHERE company_id = ?").run(row.id, now, s.companyId);
   return toSchedule(row);
 }
 
@@ -181,17 +192,28 @@ export function updateSchedule(
   change: { enabled?: boolean; everyHours?: number },
   now = new Date().toISOString(),
 ): Schedule | undefined {
+  if (change.enabled) {
+    const target = db.query<{ job: string; company_id: string }, [string]>("SELECT job, company_id FROM schedules WHERE id = ?").get(id);
+    if (target?.job === "watch") {
+      const watch = db.query<{ monitor_id: string | null; status: string }, [string]>("SELECT monitor_id, status FROM company_watches WHERE company_id = ?").get(target.company_id);
+      if (!watch?.monitor_id || (watch.status !== "watching" && watch.status !== "stop-failed")) throw new Error(`Company ${target.company_id} is not being watched`);
+    }
+  }
   if (change.enabled !== undefined) db.query("UPDATE schedules SET enabled = ? WHERE id = ?").run(change.enabled ? 1 : 0, id);
   if (change.everyHours !== undefined) {
     if (!(change.everyHours > 0)) throw new Error("A schedule needs a positive interval");
-    db.query("UPDATE schedules SET every_hours = ?, next_run_at = ? WHERE id = ?").run(change.everyHours, later(now, change.everyHours), id);
+    const job = db.query<{ job: string }, [string]>("SELECT job FROM schedules WHERE id = ?").get(id)?.job;
+    const everyHours = job === "watch" ? 1 : change.everyHours;
+    db.query("UPDATE schedules SET every_hours = ?, next_run_at = ? WHERE id = ?").run(everyHours, later(now, everyHours), id);
   }
   const row = db.query<ScheduleRow, [string]>("SELECT * FROM schedules WHERE id = ?").get(id);
   return row ? toSchedule(row) : undefined;
 }
 
 export function deleteSchedule(db: Database, id: string): boolean {
-  return db.query("DELETE FROM schedules WHERE id = ?").run(id).changes > 0;
+  const deleted = db.query("DELETE FROM schedules WHERE id = ?").run(id).changes > 0;
+  if (deleted) db.query("UPDATE company_watches SET collection_schedule_id = NULL WHERE collection_schedule_id = ?").run(id);
+  return deleted;
 }
 
 export function listSchedules(db: Database, f: { companyId?: string } = {}): Schedule[] {

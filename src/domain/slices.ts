@@ -36,7 +36,7 @@ export const STACK_CAP = 20;
 export const STACK_KEYS: StackKey[] = ["supports", "neutral", "contradicts", "unclassified"];
 
 /** The verdict and confidence folded into one signed number, so a flip is a sign change. */
-export function lean(v: Pick<HypothesisVersion, "verdict" | "confidence">): number {
+export function lean(v: { verdict: Direction; confidence: number }): number {
   if (v.verdict === "supports") return v.confidence;
   if (v.verdict === "contradicts") return -v.confidence;
   return 0;
@@ -44,7 +44,7 @@ export function lean(v: Pick<HypothesisVersion, "verdict" | "confidence">): numb
 
 /** Distinct days on which any row was assessed, oldest first. Empty if nothing is assessed. */
 export function sliceDays(rows: SliceRow[]): string[] {
-  const days = rows.flatMap((r) => r.history.map((v) => day(v.asOf)));
+  const days = rows.flatMap((r) => r.history.filter((v) => v.confidence !== undefined).map((v) => day(v.asOf)));
   return [...new Set(days)].sort();
 }
 
@@ -52,8 +52,8 @@ function markerFor(history: HypothesisVersion[], d: string): Marker | undefined 
   const sorted = history.toSorted((a, b) => a.asOf.localeCompare(b.asOf));
   const fresh = sorted.findLast((v) => day(v.asOf) === d);
   const v = fresh ?? sorted.findLast((v) => day(v.asOf) < d);
-  if (!v) return undefined;
-  return { lean: lean(v), confidence: v.confidence, verdict: v.verdict, fresh: v === fresh, asOf: v.asOf };
+  if (!v || v.confidence === undefined) return undefined;
+  return { lean: lean({ verdict: v.verdict, confidence: v.confidence }), confidence: v.confidence, verdict: v.verdict, fresh: v === fresh, asOf: v.asOf };
 }
 
 function stackFor(evidence: Evidence[], from: string | undefined, to: string): EvidenceStack {

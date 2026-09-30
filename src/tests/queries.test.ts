@@ -1,11 +1,12 @@
 import { test, expect } from "bun:test";
 import { createDb } from "../db/schema";
 import {
-    assessHypothesis,
     createHypothesis,
     getCompany,
     listHypotheses,
     recordEvidence,
+    reviewEvidence,
+    saveAssessment,
     type NewEvidence,
 } from "../db/queries";
 
@@ -48,20 +49,21 @@ test("recordEvidence skips URLs already recorded for the company's hypothesis", 
   expect(again.map((e) => e.url)).toEqual(["https://b"]);
 });
 
-test("assessHypothesis records the assessor's judgement, citing evidence", () => {
+test("saveAssessment records the analyst's judgement without model confidence", () => {
   const db = setup();
   const [a] = recordEvidence(db, "acme", "adoption", [item("https://a", "supports", "2026-02-01")], "search", "2026-02-01");
-  assessHypothesis(db, "acme", "adoption", { verdict: "supports", confidence: 74, reasoning: "Early wins", evidenceIds: [a!.id], openQuestions: ["Retention?"] }, "2026-03-01");
+  reviewEvidence(db, a!.id, { decision: "relevant" }, "2026-02-02");
+  saveAssessment(db, { companyId: "acme", hypothesisId: "adoption", verdict: "supports", reasoning: "Early wins", evidenceIds: [a!.id], reviewedEvidenceIds: [a!.id], openQuestions: ["Retention?"] }, "2026-03-01");
 
-  expect(adoption(db)).toMatchObject({ verdict: "supports", confidence: 74 });
+  expect(adoption(db)).toMatchObject({ verdict: "supports", confidence: undefined });
   expect(adoption(db).history[0]!.openQuestions).toEqual(["Retention?"]);
   expect(adoption(db, "2026-02-15")).toMatchObject({ verdict: "untested" });
 });
 
-test("assessHypothesis refuses assessments without recorded evidence", () => {
+test("saveAssessment refuses assessments without recorded evidence", () => {
   const db = setup();
   const assess = (evidenceIds: string[]) =>
-    assessHypothesis(db, "acme", "adoption", { verdict: "neutral", confidence: 60, reasoning: "", evidenceIds, openQuestions: [] });
+    saveAssessment(db, { companyId: "acme", hypothesisId: "adoption", verdict: "neutral", reasoning: "Reason", evidenceIds, reviewedEvidenceIds: evidenceIds, openQuestions: [] });
   expect(() => assess([])).toThrow(/must cite evidence/);
   expect(() => assess(["made-up"])).toThrow(/not recorded/);
   expect(adoption(db).history).toEqual([]);
@@ -73,7 +75,7 @@ test("every company is tracked on every portfolio hypothesis, with its own evide
   recordEvidence(db, "acme", "adoption", [item("https://a", "supports")], "search", "2026-09-20");
   const [b] = recordEvidence(db, "beta", "adoption", [item("https://a", "contradicts")], "search", "2026-09-20"); // same URL, other company
   expect(b).toBeDefined();
-  expect(() => assessHypothesis(db, "acme", "adoption", { verdict: "supports", confidence: 60, reasoning: "", evidenceIds: [b!.id], openQuestions: [] })).toThrow(/not recorded/);
+  expect(() => saveAssessment(db, { companyId: "acme", hypothesisId: "adoption", verdict: "supports", reasoning: "Reason", evidenceIds: [b!.id], reviewedEvidenceIds: [b!.id], openQuestions: [] })).toThrow(/not recorded/);
 
   expect(listHypotheses(db)).toEqual([{ id: "adoption", name: "Adoption", statement: "Enterprise adoption is accelerating" }]);
   const beta = getCompany(db, "beta")!.hypotheses;

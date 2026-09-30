@@ -6,14 +6,14 @@ const COS30 = Math.sqrt(3) / 2;
 test("project maps the origin to the origin and each axis to its isometric direction", () => {
   expect(project(0, 0, 0)).toEqual({ x: 0, y: 0 });
   const u = project(1, 0, 0);
-  expect(u.x).toBeCloseTo(-COS30);
+  expect(u.x).toBeCloseTo(COS30);
   expect(u.y).toBeCloseTo(0.5);
   const v = project(0, 1, 0);
   expect(v.x).toBeCloseTo(0);
   expect(v.y).toBeCloseTo(-1);
   const w = project(0, 0, 1);
   expect(w.x).toBeCloseTo(COS30);
-  expect(w.y).toBeCloseTo(0.5);
+  expect(w.y).toBeCloseTo(-0.5);
 });
 
 test("chart-space helpers place columns, leans and slices by the ISO constants", () => {
@@ -27,14 +27,22 @@ test("chart-space helpers place columns, leans and slices by the ISO constants",
   expect(sliceW(3)).toBe(3 * ISO.sliceDepth);
 });
 
-test("panelCorners is the projected rectangle of a slice, top-right first", () => {
-  const [tr, tl, bl, br] = panelCorners(1, 0);
+test("panelCorners is the projected rectangle of a slice, top-left first", () => {
+  const [tl, tr, br, bl] = panelCorners(1, 0);
   const H = ISO.planeHeight / 2;
   const W = planeWidth(1);
-  expect(tr).toEqual(project(0, H, 0));
-  expect(tl).toEqual(project(W, H, 0));
-  expect(bl).toEqual(project(W, -H, 0));
-  expect(br).toEqual(project(0, -H, 0));
+  expect(tl).toEqual(project(0, H, 0));
+  expect(tr).toEqual(project(W, H, 0));
+  expect(br).toEqual(project(W, -H, 0));
+  expect(bl).toEqual(project(0, -H, 0));
+  expect(tr!.x).toBeGreaterThan(tl!.x);
+});
+
+test("later slices sit up and to the right of earlier ones", () => {
+  const [a] = panelCorners(3, 0);
+  const [b] = panelCorners(3, 1);
+  expect(b!.x).toBeGreaterThan(a!.x);
+  expect(b!.y).toBeLessThan(a!.y);
 });
 
 test("bounds encloses every panel and grows with more slices", () => {

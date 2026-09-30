@@ -2,11 +2,10 @@ import { knownAt } from "./thesis";
 import type { Company, Update } from "./types";
 
 /**
- * Every piece of evidence across the portfolio, newest first by when it became knowable.
- * Evidence is the atomic unit here: no assessments or confidence moves, just what was found and
- * which way it points. Pass companies already viewed as of the cursor (`thesisAsOf`).
+ * Every piece of evidence across the portfolio, newest first by its recorded timestamp.
+ * Date bounds are inclusive UTC calendar days and apply before an optional result limit.
  */
-export function updatesFeed(companies: Company[], { limit = 100 }: { limit?: number } = {}): Update[] {
+export function updatesFeed(companies: Company[], { from, to, limit }: { from?: string; to?: string; limit?: number } = {}): Update[] {
   const updates = companies.flatMap((c) =>
     c.hypotheses.flatMap((h) =>
       h.evidence.map((evidence) => ({
@@ -17,5 +16,10 @@ export function updatesFeed(companies: Company[], { limit = 100 }: { limit?: num
       })),
     ),
   );
-  return updates.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+  const inRange = updates.filter(({ at }) => {
+    const recordedDay = at.slice(0, 10);
+    return (!from || recordedDay >= from) && (!to || recordedDay <= to);
+  });
+  const sorted = inRange.sort((a, b) => b.at.localeCompare(a.at));
+  return limit === undefined ? sorted : sorted.slice(0, limit);
 }

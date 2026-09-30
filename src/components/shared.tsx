@@ -17,11 +17,19 @@ export async function api<T>(path: string, body?: unknown, method = body === und
 
 /** Tells every runs view on the page (tables, sidebar badge) that a run was started. */
 export const notifyRunsChanged = () => document.dispatchEvent(new Event("asof:runs"));
+export const notifyPortfolioChanged = () => document.dispatchEvent(new Event("asof:portfolio"));
 
 export function useRunsChanged(fn: () => unknown) {
   useEffect(() => {
     document.addEventListener("asof:runs", fn);
     return () => document.removeEventListener("asof:runs", fn);
+  }, [fn]);
+}
+
+export function usePortfolioChanged(fn: () => unknown) {
+  useEffect(() => {
+    document.addEventListener("asof:portfolio", fn);
+    return () => document.removeEventListener("asof:portfolio", fn);
   }, [fn]);
 }
 
@@ -60,7 +68,7 @@ export function usePolling(fn: () => unknown, ms: number, enabled: boolean) {
 /** `path` with `?asOf=` added when viewing a past date. Keeps any query `path` already has. */
 export function withAsOf(path: string, asOf?: string) {
   if (!asOf) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}asOf=${asOf}`;
+  return `${path}${path.includes("?") ? "&" : "?"}asOf=${encodeURIComponent(asOf)}`;
 }
 
 /**
@@ -139,7 +147,13 @@ export const tone = (d?: Direction | "untested") => DIRECTION[!d || d === "untes
 
 /** A company's verdict on a hypothesis: "supports", "neutral", "contradicts" or "untested". */
 export function VerdictBadge({ verdict }: { verdict: Hypothesis["verdict"] }) {
-  return <Badge className={tone(verdict).solid}>{verdict}</Badge>;
+  const label: Record<Hypothesis["verdict"], string> = {
+    supports: "Supported",
+    neutral: "Mixed evidence",
+    contradicts: "Challenged",
+    untested: "Unassessed",
+  };
+  return <Badge className={tone(verdict).solid}>{label[verdict]}</Badge>;
 }
 
 const RUN_STATUS_STYLES: Record<Run["status"], string> = {
@@ -153,7 +167,7 @@ export function RunStatusBadge({ status }: { status: Run["status"] }) {
   return <Badge className={RUN_STATUS_STYLES[status]}>{status}</Badge>;
 }
 
-export const JOB_LABELS: Record<Job, string> = { research: "Research", assess: "Assess", watch: "Watch" };
+export const JOB_LABELS: Record<Job, string> = { research: "Find new evidence", assess: "Refresh research", watch: "Collect monitoring" };
 
 /** Direction of a piece of evidence; unclassified when nobody has judged it yet. */
 export function EvidenceTypeBadge({ type }: { type?: Evidence["type"] }) {
@@ -164,30 +178,17 @@ export function EvidenceTypeBadge({ type }: { type?: Evidence["type"] }) {
   );
 }
 
-const MS_PER_DAY = 86_400_000;
-
-/** "Feb 10, 2026 · found Sep 24, 2026", or "undated, found …": publish date is when it became knowable, found is when AsOf saw it. */
-export function evidenceDates(e: Evidence) {
-  if (!e.publishedAt) return `undated, found ${formatDate(e.discoveredAt)}`;
-  const gap = Math.abs(Date.parse(e.discoveredAt) - Date.parse(e.publishedAt));
-  return gap > MS_PER_DAY ? `${formatDate(e.publishedAt)} · found ${formatDate(e.discoveredAt)}` : formatDate(e.publishedAt);
-}
-
 export function EvidenceRow({ evidence, context, action }: { evidence: Evidence; context?: string; action?: React.ReactNode }) {
   return (
-    <li className="flex flex-col gap-1 py-3">
+    <li className="min-w-0 space-y-2 py-4">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <EvidenceTypeBadge type={evidence.type} />
-        <span>{evidenceDates(evidence)}</span>
-        <span>· via {evidence.source}</span>
-        {context && <span>· {context}</span>}
-        {action && <span className="ml-auto">{action}</span>}
+        <span>{hostOf(evidence.url)}</span>
+        {evidence.publishedAt && <span>{formatDate(evidence.publishedAt)}</span>}
+        {evidence.type && <EvidenceTypeBadge type={evidence.type} />}
+        {context && <span>{context}</span>}
       </div>
-      <p className="text-sm">{evidence.claim}</p>
-      <a href={evidence.url} target="_blank" rel="noreferrer" className="truncate text-xs text-muted-foreground underline">
-        {evidence.title}
-      </a>
-      {evidence.sourceReasoning && <p className="text-xs text-muted-foreground italic">{evidence.sourceReasoning}</p>}
+      <p className="text-sm leading-relaxed">{evidence.claim}</p>
+      {action ?? <a href={evidence.url} target="_blank" rel="noreferrer" className="block break-words text-sm underline underline-offset-2">{evidence.title}</a>}
     </li>
   );
 }

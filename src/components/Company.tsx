@@ -1,30 +1,26 @@
-import { useMemo } from "react";
-import { changedThisWeek } from "@/domain/changes";
-import { timeDomain } from "@/domain/timeline";
+import { useEffect, useRef, useState } from "react";
+import type { Run, WatchState } from "@/domain/types";
 import { Button } from "@/components/ui/button";
 import { useAsOf } from "./asof";
 import { CompanyCompare } from "./Compare";
-import { usePortfolio } from "./usePortfolio";
 import { companyHypothesisPath } from "./routes";
-import { CompanyAvatar, openResearch, useCompany } from "./shared";
-import { SliceChart } from "./SliceChart";
+import { api, CompanyAvatar, formatDateTime, notifyRunsChanged, openResearch, useApi, useCompany, usePolling } from "./shared";
 import { hypothesisRows } from "./sliceRows";
 import { StripRow } from "./StripRow";
+import { SliceChartCard } from "./SliceChartCard";
+import { usePortfolio } from "./usePortfolio";
+import { HistoryControls } from "./TimeScrubber";
 
 /**
- * One row of the matrix, expanded: every lens as a full-width strip on the shared time axis.
- * The header says what moved this week; when rewound, a table compares that day with today.
+ * One company with its current analyst conclusions and separate model research history.
  */
 export function Company({ id }: { id: string }) {
-  const { company: view, today: full } = useCompany(id);
-  const { companies } = usePortfolio();
-  const { asOf, setAsOf, today } = useAsOf();
-  const domain = useMemo(() => timeDomain(companies, today), [companies, today]);
+  const { company: view, today: full, reload } = useCompany(id);
+  const { asOf } = useAsOf();
   if (!view || !full) return null;
 
   const assessed = view.hypotheses.filter((h) => h.history.length);
-  const changed = changedThisWeek(view, asOf ?? today);
-  const contradicted = view.hypotheses.filter((h) => h.verdict === "contradicts");
+  const researchRows = hypothesisRows(full);
 
   return (
     <>
@@ -36,39 +32,34 @@ export function Company({ id }: { id: string }) {
           </h1>
           <p className="text-muted-foreground">{view.description}</p>
           <p className="mt-2 text-sm">
-            {assessed.length === 0 ? (
-              <span className="text-muted-foreground">Not assessed yet.</span>
-            ) : (
-              <>
-                <span className={changed.length ? "font-medium" : "text-muted-foreground"}>
-                  {changed.length === 0 ? "No changes this week" : `${changed.length} of ${assessed.length} hypotheses changed this week`}
-                </span>
-                {contradicted.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · evidence contradicts: {contradicted.map((h) => h.statement.toLowerCase()).join("; ")}
-                  </span>
-                )}
-              </>
-            )}
+            {assessed.length === 0 ? <span className="text-muted-foreground">No AI assessments yet.</span> : `${assessed.length} of ${view.hypotheses.length} questions researched`}
           </p>
         </div>
         {!asOf && (
-          <Button variant="outline" onClick={() => openResearch({ job: "research", companyId: id })}>
-            Run research
+          <Button variant="outline" onClick={() => openResearch({ job: "assess", companyId: id })}>
+            Research a question
           </Button>
         )}
       </div>
+
+      <HistoryControls companyId={id} />
+      {!asOf && <WatchPanel companyId={id} onChanged={reload} />}
+
+      {researchRows.length > 0 && (
+        <details className="mt-6 rounded border p-4">
+          <summary className="cursor-pointer font-medium">Research over time</summary>
+          <p className="mt-2 text-sm text-muted-foreground">How Exa's assessments changed. Historical reconstructions use their research cutoff dates.</p>
+          <div className="mt-4">
+            <SliceChartCard rows={researchRows} />
+          </div>
+        </details>
+      )}
 
       {asOf && (
         <div className="mt-6">
           <CompanyCompare view={view} full={full} asOf={asOf} />
         </div>
       )}
-
-      <div className="mt-8">
-        <SliceChart rows={hypothesisRows(full)} asOf={asOf} today={today} onPickDate={setAsOf} />
-      </div>
 
       <div className="mt-8">
         {view.hypotheses.map((h) => (
@@ -78,12 +69,77 @@ export function Company({ id }: { id: string }) {
             href={companyHypothesisPath(id, h.id)}
             hypothesis={h}
             full={full.hypotheses.find((x) => x.id === h.id)!}
-            domain={domain}
             asOf={asOf}
-            today={today}
           />
         ))}
       </div>
     </>
+  );
+}
+
+function WatchPanel({ companyId, onChanged }: { companyId: string; onChanged: () => void }) {
+  const { data: watch, reload } = useApi<WatchState>(`/api/companies/${companyId}/watch`);
+  const { activeRuns } = usePortfolio();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const collecting = activeRuns.some((run) => run.job === "watch" && run.companyId === companyId);
+  const wasCollecting = useRef(false);
+  const active = watch?.status === "watching" || watch?.status === "stop-failed";
+  const fastPolling = (watch?.status === "starting" && !watch.latestFailure) || collecting;
+  usePolling(reload, fastPolling ? 3000 : 30000, fastPolling || active);
+  useEffect(() => {
+    if (wasCollecting.current && !collecting) reload();
+    wasCollecting.current = collecting;
+  }, [collecting, reload]);
+
+  const change = async (method: "POST" | "DELETE") => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (method === "POST") {
+        const result = await api<{ watch: WatchState; initialRun: Run }>(`/api/companies/${companyId}/watch`, undefined, method);
+        if (result.initialRun) notifyRunsChanged();
+      } else {
+        await api<WatchState>(`/api/companies/${companyId}/watch`, undefined, method);
+      }
+      await Promise.all([reload(), onChanged()]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const collect = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api("/api/runs", { job: "watch", companyId });
+      notifyRunsChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!watch) return null;
+  return (
+    <section className="mt-6 rounded border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h2 className="font-medium">Company monitoring</h2><p className="mt-1 text-sm text-muted-foreground">{active ? "Exa watches for new developments daily. New sources appear in Updates." : "Watch this company for new developments through Exa Monitor."}</p></div>
+        <div className="flex flex-wrap gap-2">
+          {watch.status === "stopped" && <Button type="button" size="sm" onClick={() => change("POST")} disabled={busy}>Watch this company</Button>}
+          {watch.status === "starting" && <Button type="button" size="sm" onClick={() => change("POST")} disabled={busy}>{busy ? "Starting..." : "Retry watch"}</Button>}
+          {active && <Button type="button" size="sm" variant="outline" onClick={collect} disabled={busy || collecting}>{collecting ? "Collecting..." : "Collect now"}</Button>}
+          {active && <Button type="button" size="sm" variant={watch.status === "stop-failed" ? "destructive" : "ghost"} onClick={() => change("DELETE")} disabled={busy}>{watch.status === "stop-failed" ? "Retry stop" : "Stop watching"}</Button>}
+        </div>
+      </div>
+      {active && <p className="mt-3 text-xs text-muted-foreground">{watch.lastCollectedAt ? `Last checked ${formatDateTime(watch.lastCollectedAt)}` : "Waiting for the first update."} <a href="/updates" className="underline">View updates</a></p>}
+      {watch.remoteInspectionFailure && <p className="mt-3 text-sm text-destructive">Remote status check failed {formatDateTime(watch.remoteInspectionFailure.at)}: {watch.remoteInspectionFailure.message}</p>}
+      {watch.latestFailure && <p className="mt-3 text-sm text-destructive">Latest failure {formatDateTime(watch.latestFailure.at)}: {watch.latestFailure.message}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+    </section>
   );
 }

@@ -1,356 +1,84 @@
 # AsOf
 
-AsOf is an acquisition-diligence app that keeps a living, time-versioned investment thesis for a small set of acquisition targets.
+AsOf is a small Exa-powered research applet. Pick a company and a question to see Exa's assessment, the sources behind it, and how the research has changed over time.
 
-It answers three questions for an investment team:
+## Using the app
 
-1. **What do we know about this company right now?**
-2. **What changed that should move our investment thesis?**
-3. **What could we reasonably have known when we made an earlier decision?**
+- Research opens on company summaries. Select a question for the analysis and citations.
+- Refresh research asks Exa Agent to investigate and saves its answer directly as AI research. There is no source approval or analyst assessment workflow.
+- Watch this company uses Exa Monitor to find new developments. Updates shows the sources it finds; refresh a question to assess their implications.
+- Earlier research and Research over time show previous assessments. Historical reconstructions use a publication cutoff and are labeled as such.
 
-It uses four Exa products: Search, Agent, Monitor, and Snapshot.
+Source cards show the reported fact, publisher, date when available, and a link. Opening a source shows its saved excerpt immediately. Compare with latest retrieves current text on request and highlights changed passages; full text, provenance, and an optional historical date stay under details.
 
-## Who it's for
+All assessments shown in the main experience are AI research. Existing analyst decisions and source reviews remain stored for compatibility, but are not approval gates. Previously excluded sources remain excluded from generation. Old pending proposals can be read as AI research without accepting them. Source versions and historical records are preserved; no migration or recapture of imported sources is needed.
 
-A middle-market private equity or corporate development team evaluating 2–3 acquisition targets over several weeks. The user is an investment associate or principal. Their job is to keep diligence current between first research and investment committee (IC).
+## Application routes
 
-The problem: diligence goes stale fast. Teams search for the same information over and over, they miss important outside developments, and afterward it's hard to separate what was knowable at the time from what only looks obvious now.
+| Route | View |
+|---|---|
+| `/` or `/portfolio` | Company research summaries |
+| `/updates` | Sources recently found by Exa |
+| `/c/:companyId` | Company questions and monitoring |
+| `/c/:companyId/h/:hypothesisId` | AI assessment, sources, and earlier research |
+| `/hypotheses/:hypothesisId` | One question across companies |
+| `/settings` | Optional research schedules |
 
----
+## Runtime
 
-## Core concept
+The application uses Bun, React, SQLite through `bun:sqlite`, the Exa SDK, and the existing component library. Bun serves the HTTP API and bundles the frontend from its HTML entry point. There is no separate frontend server.
 
-Every investment prospect is represented as a series of investment hypotheses:
+| Setting | Purpose |
+|---|---|
+| `EXA_API_KEY` | Exa provider credentials, loaded from `.env` by Bun |
+| `ASOF_DB_PATH` | SQLite path, default `data/asof.sqlite` |
+| `PORT` | HTTP port, default `3000` |
 
-| Hypothesis | Status | Confidence |
-|---|---|---:|
-| Enterprise adoption is accelerating | Supported | 82% |
-| Product differentiation is defensible | Mixed | 67% |
-| Management team can scale | Supported | 76% |
-| Competitive moat is strengthening | At risk | 58% |
+Company monitoring uses a daily Exa Agent Monitor and hourly local collection. Exa can refresh remotely while AsOf is closed. AsOf imports those results only while its server is running. Collection adds sources; assessment jobs save AI research directly.
 
-Each hypothesis depends on cited evidence for/against
+## Local commands
 
-**Evidence changes -> hypotheses change -> investment thesis changes.**
-
-AsOf keeps the history of every one of those changes.
-
----
-
-## Architecture
-
-### 1. Search: investigate
-
-Search handles research.
-
-> Find evidence related to Acme's move upmarket, including enterprise customer wins, pricing changes, certifications, product launches, partnerships, and customer commentary.
-
-Results show up as structured evidence:
-
-```ts
-type Evidence = {
-  title: string;
-  claim: string;
-  url: string;
-  publishedAt?: string;
-  relevance: string;
-  direction: "supports" | "contradicts" | "neutral";
-};
-```
-
-### 2. Agent: evaluate
-
-Agent runs deeper diligence when a hypothesis needs a real evaluation.
-
-> Evaluate whether Acme is successfully moving upmarket. Research additional evidence as needed. Identify supporting evidence, contradictory evidence, unresolved questions, and recommend whether confidence in the hypothesis should increase or decrease.
-
-The app turns the result into a thesis update:
-
-```ts
-type HypothesisUpdate = {
-  previousConfidence: number;
-  currentConfidence: number;
-  status: "supported" | "mixed" | "contradicted";
-  reasoning: string;
-  supportingEvidence: Evidence[];
-  contradictingEvidence: Evidence[];
-  openQuestions: string[];
-};
-```
-
-### 3. Monitor: track assumptions
-
-Monitor is the always-on layer. We don't create one generic "News about Acme" monitor. That's mostly noise. We create one monitor per assumption the deal depends on:
-
-**Enterprise adoption**
-
-> Find newly published evidence suggesting that Acme is gaining or losing enterprise adoption, including customer wins, churn, enterprise product capabilities, pricing changes, security certifications, implementation hiring, and partnerships.
-
-**Management quality**
-
-> Find executive hires, departures, reorganizations, board changes, or other evidence relevant to Acme's management team's ability to scale the company.
-
-**Competitive moat**
-
-> Find new competitor launches, product releases, partnerships, patents, technical advances, or customer comparisons that materially affect Acme's differentiation.
-
-Monitor results feed a chronological stream of new evidence, each item tied to the hypothesis it affects.
-
-### 4. Snapshot: rewind
-
-This is the most interesting feature.
-
-The user picks a past date and asks: what did the web look like when we made this decision? AsOf uses Exa's historical snapshot capability to search only information available by that date.
-
-The user can then compare two points in time:
-
-```text
-MARCH 1, 2026                        TODAY
-
-Competitive threat: LOW              Competitive threat: HIGH
-
-Evidence available:                  New evidence:
-- Competitor X had ~15 employees     - Series B announced
-- No major enterprise customers      - Salesforce partnership
-- Seed-stage funding                 - Enterprise launch
-- SMB positioning                    - Multiple Fortune 100 customers
-```
-
-The result is a version-controlled investment thesis backed by a version-controlled web.
-
----
-
-## Demo scope
-
-The demo has one target company.
-
-Flow:
-
-```text
-Portfolio → Target company → Investment hypotheses → Evidence timeline
-→ Run diligence → New evidence appears → Hypothesis changes
-→ Rewind to earlier date
-```
-
-### Screen 1: Portfolio
-
-Three targets. Only Acme needs to work.
-
-```text
-Active Diligence
-
-Acme Security     4 hypotheses | 2 changes this week
-Northstar AI      5 hypotheses | 0 changes
-Vector Systems    4 hypotheses | 1 change
-```
-
-### Screen 2: Target overview
-
-The main demo screen. The thesis:
-
-```text
-ACME SECURITY — Investment thesis
-
-Enterprise adoption          82%   Supported
-Product differentiation      71%   Supported
-Management scalability       76%   Supported
-Competitive moat             58%   At risk
-```
-
-Next to it, recent evidence:
-
-```text
-TODAY        New competitor enterprise launch   – weakens competitive moat
-2 DAYS AGO   New Fortune 500 customer           + supports enterprise adoption
-5 DAYS AGO   VP Sales departure                 – weakens management confidence
-```
-
-### Screen 3: Hypothesis detail
-
-Clicking **Enterprise adoption is accelerating** shows:
-
-```text
-Confidence: 74% → 86%
-
-Why it changed
-+ Enterprise pricing launched
-+ 3 Fortune 500 customer announcements
-+ SOC 2 investment
-
-Remaining concern
-? No strong evidence yet about enterprise retention
-```
-
-Cited evidence goes below. One button, **Run deeper diligence**, calls Agent.
-
-### Screen 4: Rewind
-
-The climax of the demo. A simple timeline:
-
-```text
-Jan 12      Mar 1       Jun 4       Today
-   ●──────────●────────────●──────────●
-```
-
-Clicking March 1 shows a banner, *Viewing AsOf as of March 1, 2026*, and resets the thesis and evidence to what was available then.
-
-**Compare with today** shows:
-
-| | March 1 | Today |
-|---|---:|---:|
-| Competitive threat | Low | High |
-| Confidence | 81% | 58% |
-| Known competitors | 3 | 7 |
-| Material evidence | 5 items | 14 items |
-
-This is the screen that makes Snapshot obvious to the interviewer.
-
----
-
-## Implementation
-
-Keep it simple. The whole app runs on [Bun](https://bun.sh): one process, one command, no Vite, no Hono/Express.
-
-- **Server:** `Bun.serve()` with its built-in `routes` (methods and path params included)
-- **Front end:** Bun HTML imports. `index.html` is imported into the server and Bun bundles the React/TSX (HMR in dev)
-- **Storage:** `bun:sqlite`, built in
-- **Dependencies:** `react`, `react-dom`, `exa-js`
-
-```ts
-// server.ts
-import index from "./index.html";
-import { Database } from "bun:sqlite";
-
-const db = new Database("asof.sqlite");
-
-Bun.serve({
-  routes: {
-    "/*": index, // React app
-    "/api/research/search": { POST: async (req) => Response.json(await search(await req.json())) },
-    "/api/research/agent":  { POST: async (req) => Response.json(await runAgent(await req.json())) },
-    "/api/monitor/create":  { POST: async (req) => Response.json(await createMonitor(await req.json())) },
-    "/api/monitor/events":  { GET: () => Response.json(listMonitorEvents()) },
-    "/api/snapshot":        { POST: async (req) => Response.json(await snapshot(await req.json())) },
-  },
-  development: { hmr: true, console: true },
-});
-```
-
-```bash
+```sh
 bun install
-bun --hot server.ts
+bun run dev
 ```
 
-### Front end
+The existing database is migrated on startup. Before opening an older working database with changed migration code, create a SQLite-consistent backup and verify migration on a copy. The frozen demo at `data/demo.sqlite` must remain unchanged.
 
-React, bundled by Bun from `index.html` → `src/main.tsx`. Components:
+The seed command replaces the selected database with company and hypothesis definitions. It is for a new or disposable database, not the working research database.
 
-```text
-Portfolio
-TargetOverview
-HypothesisCard
-EvidenceFeed
-HypothesisDetail
-Timeline / Rewind
+```sh
+ASOF_DB_PATH=/tmp/asof-demo.sqlite bun run seed
+ASOF_DB_PATH=/tmp/asof-demo.sqlite PORT=3100 bun run dev
 ```
 
-### Back end
+Historical research can be generated with the backfill command. Its --reset option deletes reconstructed research for the selected hypotheses and preserves official assessments and evidence.
 
-The same `Bun.serve()` process, under `/api` so the routes don't collide with the front end:
-
-```text
-GET  /api/companies        the whole portfolio, with history and evidence
-GET  /api/hypotheses       the portfolio's hypotheses
-GET  /api/runs             POST /api/runs { job, companyId, hypothesisId? }
-GET  /api/schedules        POST /api/schedules, PATCH/DELETE /api/schedules/:id
-POST /api/snapshot
+```sh
+bun run backfill <companyId> [hypothesisId...] --dates YYYY-MM-DD,YYYY-MM-DD
 ```
 
-State lives in SQLite via `bun:sqlite`.
+## Verification
 
-### Out of scope
-
-- Authentication
-- Multi-tenancy
-- Queues
-- Sophisticated agent orchestration
-- Production scheduling
-- Vector databases
-- A real investment model
-
-### Seeded vs. live
-
-Don't rely on every part of the demo running live.
-
-**Seed:**
-
-- The company
-- Four hypotheses
-- Historical confidence values
-- Several existing evidence items
-- One or two historical Monitor events
-
-**Run live on Exa:**
-
-1. Search investigation
-2. Agent diligence
-3. Snapshot historical search
-
-Monitor can be configured for real ahead of time, or shown using results we collected earlier. Either way the demo stays reliable and still shows real APIs.
-
-### Data model
-
-Hypotheses belong to the portfolio, and every company is tracked on every one. Evidence and assessments
-share one vocabulary: a piece of evidence supports, contradicts or is neutral to a hypothesis, and an
-assessment's verdict says which way the credible evidence points on balance, with how confident the
-assessor is in that verdict.
-
-```ts
-type Direction = "supports" | "neutral" | "contradicts";
-
-type PortfolioHypothesis = { id: string; name: string; statement: string }; // e.g. "moat"
-
-type Company = {
-  id: string;
-  name: string;
-  description: string;
-  hypotheses: Hypothesis[]; // its standing on every portfolio hypothesis
-};
-
-type Hypothesis = PortfolioHypothesis & {
-  verdict: Direction | "untested";
-  confidence?: number; // in the verdict, 0–100
-  evidence: Evidence[];
-  history: HypothesisVersion[];
-};
-
-type HypothesisVersion = {
-  asOf: string;
-  verdict: Direction;
-  confidence: number;
-  reasoning: string;
-  evidenceIds: string[];
-  openQuestions: string[];
-};
-
-type Evidence = {
-  id: string;
-  companyId: string;
-  hypothesisId: string;
-  title: string;
-  claim: string;
-  url: string;
-  publishedAt?: string;
-  discoveredAt: string;
-  type?: Direction; // absent until judged
-  source: "search" | "agent" | "monitor"; // the Exa tool that found it
-};
+```sh
+bun test
+bunx tsc --noEmit
 ```
 
-Research runs are grouped by the job they do, not the Exa tool behind them:
+The app server loads Tailwind through `bunfig.toml`. A standalone bundle check also needs that plugin:
 
-| Job | Target | Exa tool | Writes |
-|---|---|---|---|
-| Research | a company's hypothesis | Search | tagged evidence |
-| Assess | a company's hypothesis | Agent | a verdict + confidence (and the sources it cites) |
-| Watch | a whole company | Monitor | untagged evidence on every hypothesis |
+```sh
+bun - <<'TS'
+import tailwind from "bun-plugin-tailwind";
+const result = await Bun.build({
+  entrypoints: ["./src/index.html"],
+  outdir: "/tmp/asof-build",
+  plugins: [tailwind],
+});
+if (!result.success) throw new AggregateError(result.logs, "Build failed");
+TS
+```
+
+Routine tests use deterministic provider fixtures. Live Search, Agent, Monitor, and Snapshot checks use a disposable database and are recorded separately in [the delivery record](docs/evidence-review-delivery.md). Temporary remote monitors must be removed after those checks.
+
+Authentication, collaboration, additional providers, and presentation preparation are outside this implementation.

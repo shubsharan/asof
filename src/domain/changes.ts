@@ -18,11 +18,11 @@ export function lastMove(h: Hypothesis, asOf?: string): Move | undefined {
   const to = history.at(-1);
   if (!to) return undefined;
   const from = history.at(-2);
-  return { to, from, delta: from ? to.confidence - from.confidence : undefined };
+  return { to, from, delta: from?.confidence !== undefined && to.confidence !== undefined ? to.confidence - from.confidence : undefined };
 }
 
 /** A move that changed confidence or verdict, or a first assessment: something the reader should notice. */
-export const isChange = (m: Move) => !m.from || m.delta !== 0 || m.from.verdict !== m.to.verdict;
+export const isChange = (m: Move) => !m.from || (m.delta !== undefined && m.delta !== 0) || m.from.verdict !== m.to.verdict;
 
 /** Hypotheses whose latest assessment fell in the 7 days up to `asOf` and changed something. */
 export function changedThisWeek(company: Company, asOf: string): Hypothesis[] {

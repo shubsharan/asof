@@ -10,7 +10,7 @@ const version = (asOf: string, confidence: number, verdict: HypothesisVersion["v
   evidenceIds: ["x"],
   openQuestions: [],
 });
-const hyp = (id: string, history: HypothesisVersion[]): Hypothesis => ({ id, name: id, statement: id, verdict: "untested", evidence: [], history });
+const hyp = (id: string, history: HypothesisVersion[]): Hypothesis => ({ id, name: id, statement: id, verdict: "untested", evidence: [], history, reportCount: 0, developmentCount: 0 });
 const company = (hypotheses: Hypothesis[]): Company => ({ id: "c", name: "C", description: "", domain: "", hypotheses });
 
 test("lastMove reports the delta from the previous assessment", () => {
@@ -23,6 +23,13 @@ test("isChange is true for a first assessment, a confidence move or a status mov
   expect(isChange(lastMove(hyp("a", [version("2026-01-01", 60)]))!)).toBe(true);
   expect(isChange(lastMove(hyp("a", [version("2026-01-01", 60), version("2026-02-01", 60)]))!)).toBe(false);
   expect(isChange(lastMove(hyp("a", [version("2026-01-01", 60), version("2026-02-01", 60, "neutral")]))!)).toBe(true);
+});
+
+test("an unchanged analyst verdict has no invented confidence move", () => {
+  const first: HypothesisVersion = { asOf: "2026-09-27", verdict: "supports", reasoning: "Reviewed", evidenceIds: ["x"], openQuestions: [] };
+  const move = lastMove(hyp("a", [first, { ...first, asOf: "2026-09-28", reviewedEvidenceIds: ["x", "y"] }]))!;
+  expect(move.delta).toBeUndefined();
+  expect(isChange(move)).toBe(false);
 });
 
 test("changedThisWeek counts moves in the 7 days up to the cursor, not older ones or flat ones", () => {
